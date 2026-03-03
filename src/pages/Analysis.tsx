@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
 import { db } from '@/db';
 import { getExerciseComparisons, getMuscleComparisons, getAllSessionSummaries, type MuscleVolume, type SessionSummary, type Comparison } from '@/db/calculations';
@@ -86,14 +87,14 @@ export default function Analysis() {
         <TabsContent value="session" className="mt-4">
           <div className="space-y-2">
             {sessions.map(s => (
-              <div key={s.sessionId} className="p-3 rounded-lg bg-card border">
+              <Link key={s.sessionId} to={`/session/${s.sessionId}`} className="block p-3 rounded-lg bg-card border hover:border-primary/50 transition-colors">
                 <div className="font-medium text-sm mb-1">{s.date}</div>
                 <div className="flex gap-4 text-xs text-muted-foreground">
                   {s.strengthTotal > 0 && <span>Fuerza: <span className="font-mono text-foreground">{s.strengthTotal.toLocaleString()}</span></span>}
                   {s.isometricTotal > 0 && <span>Iso: <span className="font-mono text-foreground">{Math.floor(s.isometricTotal / 60)}m</span></span>}
                   {s.cardioTime > 0 && <span>Cardio: <span className="font-mono text-foreground">{Math.floor(s.cardioTime / 60)}m</span></span>}
                 </div>
-              </div>
+              </Link>
             ))}
             {sessions.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">Sin sesiones</p>}
           </div>

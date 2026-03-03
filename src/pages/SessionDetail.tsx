@@ -5,9 +5,11 @@ import { db, type WorkoutSet, type SetType, type TrackingType } from '@/db';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
-import { Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Plus, Trash2, ArrowLeft, StickyNote } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SET_TYPE_LABELS: Record<SetType, string> = { warmup: 'Calentam.', approach: 'Aproxim.', work: 'Trabajo' };
@@ -54,10 +56,35 @@ export default function SessionDetail() {
   const allSets = useLiveQuery(() => db.sets.toArray(), []);
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [addExId, setAddExId] = useState('');
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notes, setNotes] = useState('');
+
+  useEffect(() => {
+    if (session) setNotes(session.notes ?? '');
+  }, [session]);
 
   useEffect(() => {
     getSessionSummary(sessionId).then(setSummary);
   }, [sessionId, allSets]);
+
+  async function saveNotes() {
+    await db.sessions.update(sessionId, { notes });
+    setEditingNotes(false);
+    toast.success('Notas guardadas');
+  }
+
+  async function deleteSession() {
+    const seIds = (await db.sessionExercises.where({ session_id: sessionId }).toArray()).map(se => se.id!);
+    await db.transaction('rw', [db.sets, db.sessionExercises, db.sessions], async () => {
+      for (const seId of seIds) {
+        await db.sets.where({ session_exercise_id: seId }).delete();
+      }
+      await db.sessionExercises.where({ session_id: sessionId }).delete();
+      await db.sessions.delete(sessionId);
+    });
+    toast.success('Sesión eliminada');
+    navigate('/');
+  }
 
   async function addExercise() {
     if (!addExId) return;
@@ -88,8 +115,41 @@ export default function SessionDetail() {
       <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm">
         <ArrowLeft className="h-4 w-4" />Inicio
       </button>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-bold">Sesión {session.date}</h1>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
+              <AlertDialogDescription>Se borrarán todos los ejercicios y series de esta sesión. Esta acción no se puede deshacer.</AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancelar</AlertDialogCancel>
+              <AlertDialogAction onClick={deleteSession} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      </div>
+
+      {/* Notes section */}
+      <div className="mb-4">
+        {editingNotes ? (
+          <div className="space-y-2">
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas de la sesión..." className="text-sm min-h-[60px]" />
+            <div className="flex gap-2">
+              <Button size="sm" onClick={saveNotes}>Guardar</Button>
+              <Button size="sm" variant="ghost" onClick={() => { setEditingNotes(false); setNotes(session.notes ?? ''); }}>Cancelar</Button>
+            </div>
+          </div>
+        ) : (
+          <button onClick={() => setEditingNotes(true)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <StickyNote className="h-3.5 w-3.5" />
+            {session.notes ? <span className="text-foreground">{session.notes}</span> : <span>Añadir notas...</span>}
+          </button>
+        )}
       </div>
 
       <Accordion type="multiple" className="space-y-2">
