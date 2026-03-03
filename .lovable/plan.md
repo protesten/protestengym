@@ -1,60 +1,58 @@
 
 
-## Plan: Ejercicios predefinidos + gestión de administración
+## Plan: Series pautadas en plantillas + RPE + Rango de repeticiones
 
-### Concepto
+### Resumen
 
-Crear una tabla `predefined_exercises` separada de `exercises`. Los predefinidos son visibles para todos los usuarios (SELECT público), pero solo tú (admin) puedes crearlos/editarlos/eliminarlos. Los usuarios siguen creando sus ejercicios personales en la tabla `exercises` existente. Al seleccionar ejercicios (en rutinas, sesiones), se muestran ambos: predefinidos + personales.
+Tres cambios principales:
+1. **Series pautadas en rutinas**: Cada ejercicio en una plantilla puede tener series pre-configuradas con tipo, RPE objetivo y rango de repeticiones
+2. **RPE en series de sesión**: Campo RPE (1-10) en cada serie durante el entrenamiento
+3. **Rango de repeticiones**: Las series pautadas definen un rango (ej: 8-12, 6-8) que se muestra como referencia durante el entreno
 
-### Fase 1: Base de datos
+### Base de datos (2 migraciones)
 
-**Nueva tabla `predefined_exercises`** con la misma estructura que `exercises` pero sin `user_id`:
-- `id` (uuid), `name` (text, unique), `tracking_type` (tracking_type enum), `primary_muscle_ids` (int[]), `secondary_muscle_ids` (int[]), `created_at`
+**1. `routine_exercises` — nueva columna `planned_sets`** (jsonb, default `'[]'`):
+```
+[{ "set_type": "work", "rpe": 8, "min_reps": 8, "max_reps": 12 }, ...]
+```
 
-**RLS**:
-- SELECT: público para usuarios autenticados (`true`)
-- INSERT/UPDATE/DELETE: restringido a admin vía función `has_role`
+**2. `sets` — nueva columna `rpe`** (numeric, nullable)
 
-**Sistema de roles** (tabla `user_roles` con enum `app_role`):
-- Crear enum `app_role` ('admin', 'user')
-- Crear tabla `user_roles` (user_id, role) con RLS
-- Función `has_role(uuid, app_role)` security definer
-- Asignar rol admin a tu usuario
+### Cambios en código
 
-**Insertar los ~45 ejercicios predefinidos únicos** (deduplicados de la lista proporcionada) con sus muscle_ids mapeados a la tabla `muscles`.
-
-### Fase 2: API
-
-Añadir a `src/lib/api.ts`:
-- `getPredefinedExercises()` — SELECT de `predefined_exercises`
-- `createPredefinedExercise()`, `updatePredefinedExercise()`, `deletePredefinedExercise()` — CRUD admin
-- `getAllExercises()` — combina predefinidos + personales para selección en rutinas/sesiones
-- `isAdmin()` — consulta `user_roles`
-
-### Fase 3: UI
-
-**Página Ejercicios (`Exercises.tsx`)**:
-- Añadir tabs o secciones: "Predefinidos" y "Mis ejercicios"
-- Los predefinidos muestran badge "Predefinido" y solo son editables/eliminables si el usuario es admin
-- Los personales funcionan como ahora
-- Admin ve botones de crear/editar/eliminar en predefinidos
-
-**Selección de ejercicios** (en RoutineDetail, SessionDetail):
-- Mostrar ambas listas (predefinidos + personales) al añadir ejercicio, agrupados
-
-### Fase 4: Mapeo de músculos para los ejercicios
-
-Mapear cada ejercicio de la lista a los IDs de la tabla `muscles` existente. Algunos músculos mencionados (como "psoas ilíaco", "lumbares") no existen en la tabla actual, por lo que se añadirán a la tabla `muscles`.
-
-**Músculos nuevos a insertar**: Psoas ilíaco, Erectores lumbares (o usar Erectores espinales id:12 como equivalente).
-
-### Archivos afectados
-
-| Acción | Archivo |
+| Archivo | Cambio |
 |---|---|
-| Migración SQL | Nueva tabla, roles, seed de ejercicios |
-| Modificar | `src/lib/api.ts` — nuevas funciones |
-| Modificar | `src/pages/Exercises.tsx` — tabs predefinidos/personales, lógica admin |
-| Modificar | `src/pages/RoutineDetail.tsx` — mostrar ambos tipos al seleccionar |
-| Modificar | `src/pages/SessionDetail.tsx` — igual |
+| `src/lib/api.ts` | `addRoutineExercise` acepta `planned_sets`. `createSet` acepta `set_type` y `rpe`. |
+| `src/lib/constants.ts` | Escala RPE labels (opcional) |
+| `src/pages/RoutineDetail.tsx` | Expandir cada ejercicio para mostrar/editar series pautadas: botón añadir serie, tipo (select), RPE (select 1-10), rango reps (min-max inputs). Guardar como jsonb en `planned_sets`. |
+| `src/pages/SessionDetail.tsx` | Añadir select RPE (1-10) en `SetRow`. Mostrar rango de reps pautado como placeholder/referencia si la sesión viene de rutina. |
+| `src/pages/NewSession.tsx` | Al crear sesión desde rutina, leer `planned_sets` de cada `routine_exercise` y crear los sets con `set_type` y `rpe` del plan. |
+
+### Flujo de uso
+
+1. **Plantilla**: "Press banca → Serie 1: Trabajo, RPE 8, 8-12 reps / Serie 2: Trabajo, RPE 9, 6-8 reps"
+2. **Iniciar sesión desde rutina**: Se crean automáticamente 2 sets con tipo, RPE y el rango como referencia
+3. **Durante entreno**: El usuario rellena peso/reps reales, ajusta RPE si quiere, y puede añadir/quitar series extra
+
+### UI en RoutineDetail (diseño)
+
+Cada ejercicio se expande para mostrar sus series pautadas:
+```text
+┌─────────────────────────────────────┐
+│ 1  Press banca inclinado    ▲ ▼ 🗑  │
+│  ┌──────────────────────────────┐   │
+│  │ S1: Trabajo  RPE 8  8-12rep │ 🗑 │
+│  │ S2: Trabajo  RPE 9  6-8rep  │ 🗑 │
+│  │ S3: Aprox.   RPE 6  10-12   │ 🗑 │
+│  │       [+ Añadir serie]      │   │
+│  └──────────────────────────────┘   │
+└─────────────────────────────────────┘
+```
+
+### UI en SessionDetail — SetRow con RPE
+
+Cada fila de serie añade un select compacto de RPE al final:
+```text
+[Trabajo ▼] [80 kg] [10 reps] [RPE 8 ▼] 🗑
+```
 
