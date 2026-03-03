@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -7,10 +7,10 @@ import {
   updateSession, deleteSession as deleteSessionApi, addSessionExercise,
   createSet, updateSet as updateSetApi, deleteSet as deleteSetApi,
   deleteSessionExercise as deleteSeApi, updateSessionExercise,
-  createSession, type WorkoutSet, type AnyExercise,
+  createSession, getRoutineExercises, type WorkoutSet, type AnyExercise,
 } from '@/lib/api';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
-import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType } from '@/lib/constants';
+import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType, type PlannedSet } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -37,8 +37,26 @@ function NumericInput({ value, placeholder, className, onSave }: { value: number
   );
 }
 
-function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
+function RepRangeBadge({ plannedSet }: { plannedSet?: PlannedSet }) {
+  if (!plannedSet || (plannedSet.min_reps == null && plannedSet.max_reps == null)) return null;
+  const range = plannedSet.min_reps != null && plannedSet.max_reps != null
+    ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
+    : plannedSet.min_reps != null ? `${plannedSet.min_reps}+` : `≤${plannedSet.max_reps}`;
+  return (
+    <span className="text-[10px] font-mono text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded shrink-0" title="Rango pautado">
+      {range}r
+    </span>
+  );
+}
+
+function SetRow({ set, trackingType, plannedSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = (set as any).rpe;
+  
+  // Build reps placeholder with range info
+  const repsPlaceholder = plannedSet && plannedSet.min_reps != null && plannedSet.max_reps != null
+    ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
+    : 'reps';
+
   return (
     <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/20 flex-wrap">
       <Select value={set.set_type} onValueChange={v => onUpdate({ set_type: v as SetType })}>
@@ -48,10 +66,10 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
       {(trackingType === 'weight_reps') && (
         <>
           <NumericInput value={set.weight} placeholder="kg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
-          <NumericInput value={set.reps} placeholder="reps" className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
         </>
       )}
-      {trackingType === 'reps_only' && <NumericInput value={set.reps} placeholder="reps" className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />}
+      {trackingType === 'reps_only' && <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />}
       {trackingType === 'time_only' && <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />}
       {trackingType === 'distance_time' && (
         <>
@@ -63,6 +81,7 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
         <SelectTrigger className="w-20 h-8 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
         <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
       </Select>
+      <RepRangeBadge plannedSet={plannedSet} />
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
   );
@@ -78,6 +97,26 @@ export default function SessionDetail() {
   const { data: sessionExercises } = useQuery({ queryKey: ['session_exercises', sessionId], queryFn: () => getSessionExercises(sessionId) });
   const { data: exercises } = useQuery({ queryKey: ['all_exercises'], queryFn: getAllExercises });
   const { data: allSets } = useQuery({ queryKey: ['sets', sessionId], queryFn: () => getSetsBySession(sessionId) });
+  
+  // Fetch routine planned sets when session comes from a routine
+  const routineId = session?.routine_id;
+  const { data: routineExercises } = useQuery({
+    queryKey: ['routine_exercises', routineId],
+    queryFn: () => getRoutineExercises(routineId!),
+    enabled: !!routineId,
+  });
+
+  // Build a map: exercise_id → PlannedSet[]
+  const plannedSetsMap = useMemo(() => {
+    const map = new Map<string, PlannedSet[]>();
+    if (!routineExercises) return map;
+    for (const re of routineExercises) {
+      const ps = Array.isArray((re as any).planned_sets) ? (re as any).planned_sets : [];
+      map.set(re.exercise_id, ps);
+    }
+    return map;
+  }, [routineExercises]);
+
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [addExId, setAddExId] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -189,6 +228,7 @@ export default function SessionDetail() {
         {sessionExercises?.map((se, idx) => {
           const ex = getExercise(se.exercise_id);
           const sets = getSets(se.id);
+          const plannedSets = plannedSetsMap.get(se.exercise_id) ?? [];
           const isFirst = idx === 0;
           const isLast = idx === (sessionExercises.length - 1);
           return (
@@ -209,7 +249,16 @@ export default function SessionDetail() {
               </div>
               <AccordionContent>
                 <div className="space-y-1.5">
-                  {sets.map(s => <SetRow key={s.id} set={s} trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType} onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })} onDelete={() => deleteSetMutation.mutate(s.id)} />)}
+                  {sets.map((s, setIdx) => (
+                    <SetRow
+                      key={s.id}
+                      set={s}
+                      trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
+                      plannedSet={plannedSets[setIdx]}
+                      onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })}
+                      onDelete={() => deleteSetMutation.mutate(s.id)}
+                    />
+                  ))}
                 </div>
                 <Button variant="outline" size="sm" className="mt-2 w-full rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => addSetMutation.mutate(se.id)}>
                   <Plus className="h-3 w-3 mr-1" />Serie
