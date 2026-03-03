@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
 import { RestTimer } from '@/components/RestTimer';
+import { WarmupCalculator } from '@/components/WarmupCalculator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon } from 'lucide-react';
@@ -314,6 +315,9 @@ export default function SessionDetail() {
                   exerciseNotes={(ex as any)?.notes ?? null}
                   source={ex?.source ?? 'personal'}
                 />
+                {ex?.tracking_type === 'weight_reps' && (
+                  <WarmupCalculator exerciseName={ex?.name ?? 'Ejercicio'} />
+                )}
                 <AlertDialog>
                   <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
                   <AlertDialogContent className="bg-card border-border rounded-2xl">
