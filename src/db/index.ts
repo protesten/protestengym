@@ -77,24 +77,23 @@ class WorkoutDB extends Dexie {
 
 export const db = new WorkoutDB();
 
-const ALL_MUSCLES = [
-  'Pectoral mayor','Pectoral menor',
-  'Dorsal ancho','Trapecio superior','Trapecio medio','Trapecio inferior',
-  'Deltoides anterior','Deltoides lateral','Deltoides posterior',
-  'Bíceps braquial','Braquial anterior','Coracobraquial',
-  'Tríceps braquial (cabeza larga)','Tríceps braquial (cabeza lateral)','Tríceps braquial (cabeza medial)',
-  'Braquiorradial (Supinador largo)','Extensores del antebrazo','Flexores del antebrazo',
-  'Romboides mayor','Romboides menor','Redondo mayor','Redondo menor','Infraespinoso',
-  'Erectores espinales',
-  'Vasto lateral','Vasto medial','Vasto intermedio','Recto femoral',
-  'Glúteo mayor','Glúteo medio','Glúteo menor',
-  'Bíceps femoral','Semitendinoso','Semimembranoso',
-  'Gastrocnemio lateral (Gemelo)','Gastrocnemio medial (Gemelo)','Sóleo',
-  'Aductor mayor','Aductor largo','Aductor corto','Grácil','Pectíneo',
-  'Tensor de la fascia lata','Tibial anterior',
-  'Recto abdominal','Oblicuo externo','Oblicuo interno','Transverso del abdomen',
-  'Serrato anterior',
-];
+export const MUSCLE_GROUPS: Record<string, string[]> = {
+  'Pecho': ['Pectoral mayor', 'Pectoral menor'],
+  'Espalda': ['Dorsal ancho', 'Trapecio superior', 'Trapecio medio', 'Trapecio inferior', 'Romboides mayor', 'Romboides menor', 'Redondo mayor', 'Redondo menor', 'Infraespinoso', 'Erectores espinales'],
+  'Hombros': ['Deltoides anterior', 'Deltoides lateral', 'Deltoides posterior'],
+  'Bíceps': ['Bíceps braquial', 'Braquial anterior', 'Coracobraquial'],
+  'Tríceps': ['Tríceps braquial (cabeza larga)', 'Tríceps braquial (cabeza lateral)', 'Tríceps braquial (cabeza medial)'],
+  'Antebrazos': ['Braquiorradial (Supinador largo)', 'Extensores del antebrazo', 'Flexores del antebrazo'],
+  'Cuádriceps': ['Vasto lateral', 'Vasto medial', 'Vasto intermedio', 'Recto femoral'],
+  'Glúteos': ['Glúteo mayor', 'Glúteo medio', 'Glúteo menor'],
+  'Isquiotibiales': ['Bíceps femoral', 'Semitendinoso', 'Semimembranoso'],
+  'Gemelos': ['Gastrocnemio lateral (Gemelo)', 'Gastrocnemio medial (Gemelo)', 'Sóleo'],
+  'Aductores': ['Aductor mayor', 'Aductor largo', 'Aductor corto', 'Grácil', 'Pectíneo'],
+  'Piernas (otros)': ['Tensor de la fascia lata', 'Tibial anterior'],
+  'Core': ['Recto abdominal', 'Oblicuo externo', 'Oblicuo interno', 'Transverso del abdomen', 'Serrato anterior'],
+};
+
+const ALL_MUSCLES = Object.values(MUSCLE_GROUPS).flat();
 
 // Mapping from old generic muscles to new detailed ones
 const OLD_TO_NEW: Record<string, string> = {
