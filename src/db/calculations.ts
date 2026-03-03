@@ -371,3 +371,250 @@ export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise
 
   return results;
 }
+
+// ============ Weekly Sets per Muscle ============
+export interface WeeklyMuscleSets {
+  muscleId: number;
+  muscleName: string;
+  workingSets: number;
+}
+
+export async function getWeeklyMuscleSets(): Promise<WeeklyMuscleSets[]> {
+  const now = new Date();
+  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const from = format(weekStart, 'yyyy-MM-dd');
+  const to = format(now, 'yyyy-MM-dd');
+
+  const { data: muscles } = await supabase.from('muscles').select('*').order('id');
+  const { data: exercises } = await supabase.from('exercises').select('*');
+  const { data: predefined } = await supabase.from('predefined_exercises').select('*');
+  const { data: sessions } = await supabase.from('sessions').select('id').gte('date', from).lte('date', to);
+  if (!muscles || !sessions?.length) return [];
+
+  const allExercises = [...(exercises ?? []), ...(predefined ?? [])];
+  const sessionIds = sessions.map(s => s.id);
+  const { data: sesExs } = await supabase.from('session_exercises').select('*').in('session_id', sessionIds);
+  if (!sesExs?.length) return [];
+
+  const seIds = sesExs.map(se => se.id);
+  const { data: allSets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
+  if (!allSets) return [];
+
+  // Count working sets per exercise
+  const setsPerExercise = new Map<string, number>();
+  for (const se of sesExs) {
+    const workCount = allSets.filter(s => s.session_exercise_id === se.id && s.set_type === 'work').length;
+    setsPerExercise.set(se.exercise_id, (setsPerExercise.get(se.exercise_id) ?? 0) + workCount);
+  }
+
+  const result: WeeklyMuscleSets[] = [];
+  for (const muscle of muscles) {
+    let totalSets = 0;
+    for (const [exId, setCount] of setsPerExercise) {
+      const ex = allExercises.find(e => e.id === exId);
+      if (!ex) continue;
+      const isPrimary = (ex.primary_muscle_ids ?? []).includes(muscle.id);
+      const isSecondary = (ex.secondary_muscle_ids ?? []).includes(muscle.id);
+      if (isPrimary) totalSets += setCount;
+      else if (isSecondary) totalSets += setCount * 0.5;
+    }
+    if (totalSets > 0) {
+      result.push({ muscleId: muscle.id, muscleName: muscle.name, workingSets: Math.round(totalSets * 10) / 10 });
+    }
+  }
+  return result.sort((a, b) => b.workingSets - a.workingSets);
+}
+
+// ============ 1RM Estimation (Epley) ============
+export interface ExerciseRM {
+  exerciseId: string;
+  exerciseName: string;
+  estimated1RM: number;
+  weight: number;
+  reps: number;
+  date: string;
+}
+
+export function calculate1RM(weight: number, reps: number): number {
+  if (reps <= 0 || weight <= 0) return 0;
+  if (reps === 1) return weight;
+  return Math.round(weight * (1 + reps / 30) * 10) / 10;
+}
+
+export async function getAll1RMs(): Promise<ExerciseRM[]> {
+  const { data: exercises } = await supabase.from('exercises').select('*');
+  const { data: allSessions } = await supabase.from('sessions').select('*');
+  if (!exercises || !allSessions) return [];
+  const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
+  const results: ExerciseRM[] = [];
+
+  for (const ex of exercises) {
+    if (ex.tracking_type !== 'weight_reps') continue;
+    const { data: sesExs } = await supabase.from('session_exercises').select('*').eq('exercise_id', ex.id);
+    if (!sesExs?.length) continue;
+
+    let best1RM = 0;
+    let bestWeight = 0, bestReps = 0, bestDate = '';
+
+    for (const se of sesExs) {
+      const date = sessionDateMap.get(se.session_id) ?? '';
+      const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
+      for (const s of (sets ?? []).filter(s => s.set_type === 'work')) {
+        const rm = calculate1RM(s.weight ?? 0, s.reps ?? 0);
+        if (rm > best1RM) {
+          best1RM = rm;
+          bestWeight = s.weight ?? 0;
+          bestReps = s.reps ?? 0;
+          bestDate = date;
+        }
+      }
+    }
+
+    if (best1RM > 0) {
+      results.push({ exerciseId: ex.id, exerciseName: ex.name, estimated1RM: best1RM, weight: bestWeight, reps: bestReps, date: bestDate });
+    }
+  }
+  return results.sort((a, b) => b.estimated1RM - a.estimated1RM);
+}
+
+export interface RM1History {
+  date: string;
+  estimated1RM: number;
+}
+
+export async function get1RMHistory(exerciseId: string): Promise<RM1History[]> {
+  const { data: allSessions } = await supabase.from('sessions').select('*').order('date', { ascending: true });
+  if (!allSessions) return [];
+
+  const results: RM1History[] = [];
+  for (const session of allSessions) {
+    const { data: ses } = await supabase.from('session_exercises').select('id').eq('session_id', session.id).eq('exercise_id', exerciseId);
+    if (!ses?.length) continue;
+    const { data: sets } = await supabase.from('sets').select('*').in('session_exercise_id', ses.map(s => s.id));
+    let best = 0;
+    for (const s of (sets ?? []).filter(s => s.set_type === 'work')) {
+      const rm = calculate1RM(s.weight ?? 0, s.reps ?? 0);
+      if (rm > best) best = rm;
+    }
+    if (best > 0) results.push({ date: session.date, estimated1RM: best });
+  }
+  return results;
+}
+
+// ============ Streak & Consistency ============
+export interface StreakData {
+  currentStreak: number; // consecutive weeks
+  bestStreak: number;
+  sessionsThisMonth: number;
+  weeklyAverage: number;
+  daysSinceLastSession: number;
+  activityMap: Map<string, number>; // date -> session count (last 90 days)
+}
+
+export async function getStreakData(): Promise<StreakData> {
+  const { data: sessions } = await supabase.from('sessions').select('date').order('date', { ascending: false });
+  if (!sessions?.length) {
+    return { currentStreak: 0, bestStreak: 0, sessionsThisMonth: 0, weeklyAverage: 0, daysSinceLastSession: -1, activityMap: new Map() };
+  }
+
+  const now = new Date();
+  const today = format(now, 'yyyy-MM-dd');
+
+  // Activity map (last 90 days)
+  const activityMap = new Map<string, number>();
+  const cutoff = format(subDays(now, 90), 'yyyy-MM-dd');
+  for (const s of sessions) {
+    if (s.date >= cutoff) {
+      activityMap.set(s.date, (activityMap.get(s.date) ?? 0) + 1);
+    }
+  }
+
+  // Days since last session
+  const lastDate = sessions[0].date;
+  const daysSinceLastSession = Math.floor((now.getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24));
+
+  // Sessions this month
+  const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
+  const sessionsThisMonth = sessions.filter(s => s.date >= monthStart).length;
+
+  // Weekly average (last 8 weeks)
+  const eightWeeksAgo = format(subWeeks(now, 8), 'yyyy-MM-dd');
+  const last8Weeks = sessions.filter(s => s.date >= eightWeeksAgo).length;
+  const weeklyAverage = Math.round((last8Weeks / 8) * 10) / 10;
+
+  // Streak (consecutive weeks with at least 1 session)
+  const sessionDates = new Set(sessions.map(s => s.date));
+  let currentStreak = 0;
+  let bestStreak = 0;
+  let streak = 0;
+
+  for (let i = 0; i < 52; i++) {
+    const ws = startOfWeek(subWeeks(now, i), { weekStartsOn: 1 });
+    const we = endOfWeek(subWeeks(now, i), { weekStartsOn: 1 });
+    let hasSession = false;
+    for (let d = new Date(ws); d <= we; d.setDate(d.getDate() + 1)) {
+      if (sessionDates.has(format(d, 'yyyy-MM-dd'))) { hasSession = true; break; }
+    }
+    if (hasSession) {
+      streak++;
+      if (streak > bestStreak) bestStreak = streak;
+    } else {
+      if (i === 0) { /* current week empty is OK, check if streak continues from last week */ }
+      else { if (currentStreak === 0) currentStreak = streak; streak = 0; }
+    }
+  }
+  if (currentStreak === 0) currentStreak = streak;
+
+  return { currentStreak, bestStreak, sessionsThisMonth, weeklyAverage, daysSinceLastSession, activityMap };
+}
+
+// ============ PR Check (for live notification) ============
+export interface PRCheckResult {
+  isPR: boolean;
+  prType: 'weight' | 'volume' | 'reps' | 'time' | 'distance' | '1rm' | null;
+  previousBest: number;
+  newValue: number;
+}
+
+export async function checkForPR(exerciseId: string, trackingType: TrackingType, currentSet: WorkoutSet): Promise<PRCheckResult> {
+  const { data: sesExs } = await supabase.from('session_exercises').select('id, session_id').eq('exercise_id', exerciseId);
+  if (!sesExs?.length) return { isPR: false, prType: null, previousBest: 0, newValue: 0 };
+
+  const seIds = sesExs.map(se => se.id);
+  const { data: allSets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
+  const historicalSets = (allSets ?? []).filter(s => s.set_type === 'work' && s.id !== currentSet.id);
+
+  if (currentSet.set_type !== 'work') return { isPR: false, prType: null, previousBest: 0, newValue: 0 };
+
+  switch (trackingType) {
+    case 'weight_reps': {
+      const currentWeight = currentSet.weight ?? 0;
+      const current1RM = calculate1RM(currentWeight, currentSet.reps ?? 0);
+      const maxWeight = Math.max(0, ...historicalSets.map(s => s.weight ?? 0));
+      const max1RM = Math.max(0, ...historicalSets.map(s => calculate1RM(s.weight ?? 0, s.reps ?? 0)));
+
+      if (currentWeight > maxWeight && currentWeight > 0) return { isPR: true, prType: 'weight', previousBest: maxWeight, newValue: currentWeight };
+      if (current1RM > max1RM && current1RM > 0) return { isPR: true, prType: '1rm', previousBest: max1RM, newValue: current1RM };
+      break;
+    }
+    case 'reps_only': {
+      const currentReps = currentSet.reps ?? 0;
+      const maxReps = Math.max(0, ...historicalSets.map(s => s.reps ?? 0));
+      if (currentReps > maxReps && currentReps > 0) return { isPR: true, prType: 'reps', previousBest: maxReps, newValue: currentReps };
+      break;
+    }
+    case 'time_only': {
+      const currentTime = currentSet.duration_seconds ?? 0;
+      const maxTime = Math.max(0, ...historicalSets.map(s => s.duration_seconds ?? 0));
+      if (currentTime > maxTime && currentTime > 0) return { isPR: true, prType: 'time', previousBest: maxTime, newValue: currentTime };
+      break;
+    }
+    case 'distance_time': {
+      const currentDist = currentSet.distance_meters ?? 0;
+      const maxDist = Math.max(0, ...historicalSets.map(s => s.distance_meters ?? 0));
+      if (currentDist > maxDist && currentDist > 0) return { isPR: true, prType: 'distance', previousBest: maxDist, newValue: currentDist };
+      break;
+    }
+  }
+  return { isPR: false, prType: null, previousBest: 0, newValue: 0 };
+}
