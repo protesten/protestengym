@@ -29,15 +29,10 @@ function NumericInput({ value, placeholder, className, onSave }: { value: number
   useEffect(() => { setLocal(value?.toString() ?? ''); }, [value]);
   return (
     <Input
-      inputMode="decimal"
-      placeholder={placeholder}
-      className={className}
-      value={local}
-      onChange={e => setLocal(e.target.value)}
-      onBlur={() => {
-        const parsed = local.trim() === '' ? null : Number(local);
-        if (parsed !== value) onSave(parsed);
-      }}
+      inputMode="decimal" placeholder={placeholder}
+      className={cn("rounded-md bg-secondary/50 border-border", className)}
+      value={local} onChange={e => setLocal(e.target.value)}
+      onBlur={() => { const parsed = local.trim() === '' ? null : Number(local); if (parsed !== value) onSave(parsed); }}
     />
   );
 }
@@ -45,12 +40,10 @@ function NumericInput({ value, placeholder, className, onSave }: { value: number
 function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = (set as any).rpe;
   return (
-    <div className="flex items-center gap-1.5 py-1 flex-wrap">
+    <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/20 flex-wrap">
       <Select value={set.set_type} onValueChange={v => onUpdate({ set_type: v as SetType })}>
-        <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
-        <SelectContent>
-          {Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
-        </SelectContent>
+        <SelectTrigger className="w-24 h-8 text-xs rounded-md bg-card border-border"><SelectValue /></SelectTrigger>
+        <SelectContent>{Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
       </Select>
       {(trackingType === 'weight_reps') && (
         <>
@@ -58,12 +51,8 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
           <NumericInput value={set.reps} placeholder="reps" className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
         </>
       )}
-      {trackingType === 'reps_only' && (
-        <NumericInput value={set.reps} placeholder="reps" className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
-      )}
-      {trackingType === 'time_only' && (
-        <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
-      )}
+      {trackingType === 'reps_only' && <NumericInput value={set.reps} placeholder="reps" className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />}
+      {trackingType === 'time_only' && <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />}
       {trackingType === 'distance_time' && (
         <>
           <NumericInput value={set.duration_seconds} placeholder="seg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
@@ -71,10 +60,8 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
         </>
       )}
       <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
-        <SelectTrigger className="w-20 h-8 text-xs"><SelectValue placeholder="RPE" /></SelectTrigger>
-        <SelectContent>
-          {RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}
-        </SelectContent>
+        <SelectTrigger className="w-20 h-8 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
+        <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
       </Select>
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
@@ -96,13 +83,8 @@ export default function SessionDetail() {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
 
-  useEffect(() => {
-    if (session) setNotes(session.notes ?? '');
-  }, [session]);
-
-  useEffect(() => {
-    getSessionSummary(sessionId).then(setSummary);
-  }, [sessionId, allSets]);
+  useEffect(() => { if (session) setNotes(session.notes ?? ''); }, [session]);
+  useEffect(() => { getSessionSummary(sessionId).then(setSummary); }, [sessionId, allSets]);
 
   const invalidateSession = () => {
     queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
@@ -110,16 +92,8 @@ export default function SessionDetail() {
     queryClient.invalidateQueries({ queryKey: ['sets', sessionId] });
   };
 
-  const saveNotesMutation = useMutation({
-    mutationFn: () => updateSession(sessionId, { notes }),
-    onSuccess: () => { setEditingNotes(false); toast.success('Notas guardadas'); invalidateSession(); },
-  });
-
-  const deleteSessionMutation = useMutation({
-    mutationFn: () => deleteSessionApi(sessionId),
-    onSuccess: () => { toast.success('Sesión eliminada'); navigate('/'); },
-  });
-
+  const saveNotesMutation = useMutation({ mutationFn: () => updateSession(sessionId, { notes }), onSuccess: () => { setEditingNotes(false); toast.success('Notas guardadas'); invalidateSession(); } });
+  const deleteSessionMutation = useMutation({ mutationFn: () => deleteSessionApi(sessionId), onSuccess: () => { toast.success('Sesión eliminada'); navigate('/'); } });
   const duplicateMutation = useMutation({
     mutationFn: async () => {
       const today = new Date().toISOString().slice(0, 10);
@@ -128,10 +102,7 @@ export default function SessionDetail() {
         for (const se of sessionExercises) {
           const newSe = await addSessionExercise(newSession.id, se.exercise_id, se.order_index);
           const sets = allSets?.filter(s => s.session_exercise_id === se.id) ?? [];
-          for (const s of sets) {
-            await createSet(newSe.id, s.set_type);
-            // Note: duplicated sets start empty, user fills values
-          }
+          for (const s of sets) await createSet(newSe.id, s.set_type);
         }
       }
       return newSession.id;
@@ -140,33 +111,14 @@ export default function SessionDetail() {
   });
 
   const addExMutation = useMutation({
-    mutationFn: async () => {
-      if (!addExId) return;
-      const maxOrder = sessionExercises?.length ? Math.max(...sessionExercises.map(se => se.order_index)) : -1;
-      await addSessionExercise(sessionId, addExId, maxOrder + 1);
-    },
+    mutationFn: async () => { if (!addExId) return; const maxOrder = sessionExercises?.length ? Math.max(...sessionExercises.map(se => se.order_index)) : -1; await addSessionExercise(sessionId, addExId, maxOrder + 1); },
     onSuccess: () => { setAddExId(''); invalidateSession(); },
   });
 
-  const addSetMutation = useMutation({
-    mutationFn: (seId: string) => createSet(seId),
-    onSuccess: () => invalidateSession(),
-  });
-
-  const updateSetMutation = useMutation({
-    mutationFn: ({ setId, data }: { setId: string; data: Partial<WorkoutSet> }) => updateSetApi(setId, data),
-    onSuccess: () => invalidateSession(),
-  });
-
-  const deleteSetMutation = useMutation({
-    mutationFn: deleteSetApi,
-    onSuccess: () => invalidateSession(),
-  });
-
-  const deleteSeMutation = useMutation({
-    mutationFn: deleteSeApi,
-    onSuccess: () => { toast.success('Ejercicio eliminado'); invalidateSession(); },
-  });
+  const addSetMutation = useMutation({ mutationFn: (seId: string) => createSet(seId), onSuccess: () => invalidateSession() });
+  const updateSetMutation = useMutation({ mutationFn: ({ setId, data }: { setId: string; data: Partial<WorkoutSet> }) => updateSetApi(setId, data), onSuccess: () => invalidateSession() });
+  const deleteSetMutation = useMutation({ mutationFn: deleteSetApi, onSuccess: () => invalidateSession() });
+  const deleteSeMutation = useMutation({ mutationFn: deleteSeApi, onSuccess: () => { toast.success('Ejercicio eliminado'); invalidateSession(); } });
 
   const moveExMutation = useMutation({
     mutationFn: async ({ seId, direction }: { seId: string; direction: 'up' | 'down' }) => {
@@ -174,8 +126,7 @@ export default function SessionDetail() {
       const idx = sessionExercises.findIndex(se => se.id === seId);
       const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
       if (swapIdx < 0 || swapIdx >= sessionExercises.length) return;
-      const a = sessionExercises[idx];
-      const b = sessionExercises[swapIdx];
+      const a = sessionExercises[idx]; const b = sessionExercises[swapIdx];
       await updateSessionExercise(a.id, { order_index: b.order_index });
       await updateSessionExercise(b.id, { order_index: a.order_index });
     },
@@ -185,53 +136,33 @@ export default function SessionDetail() {
   const getExercise = (exId: string) => exercises?.find(e => e.id === exId) as AnyExercise | undefined;
   const getSets = (seId: string) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
-  if (!session) return <div className="p-4">Cargando...</div>;
+  if (!session) return <div className="p-4 text-muted-foreground">Cargando...</div>;
 
   return (
     <div className="p-4 pb-24 max-w-lg mx-auto">
-      <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm">
+      <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm font-medium hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />Inicio
       </button>
+
       <div className="flex items-center justify-between mb-2">
         <Popover>
           <PopoverTrigger asChild>
-            <Button variant="ghost" className="text-xl font-bold px-2 h-auto py-1 gap-2">
+            <Button variant="ghost" className="text-xl font-black px-2 h-auto py-1 gap-2 hover:bg-secondary/50">
               Sesión {session.date}
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+              <CalendarIcon className="h-4 w-4 text-primary" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0" align="start">
-            <Calendar
-              mode="single"
-              selected={parseISO(session.date)}
-              onSelect={async (date) => {
-                if (date) {
-                  const newDate = format(date, 'yyyy-MM-dd');
-                  await updateSession(sessionId, { date: newDate });
-                  invalidateSession();
-                  toast.success('Fecha actualizada');
-                }
-              }}
-              initialFocus
-              className={cn("p-3 pointer-events-auto")}
-            />
+          <PopoverContent className="w-auto p-0 bg-card border-border rounded-xl" align="start">
+            <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); } }} initialFocus className={cn("p-3 pointer-events-auto")} />
           </PopoverContent>
         </Popover>
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={() => duplicateMutation.mutate()} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateMutation.mutate()} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
           <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent>
-              <AlertDialogHeader>
-                <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
-                <AlertDialogDescription>Se borrarán todos los ejercicios y series de esta sesión. Esta acción no se puede deshacer.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                <AlertDialogAction onClick={() => deleteSessionMutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
-              </AlertDialogFooter>
+            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
+            <AlertDialogContent className="bg-card border-border rounded-2xl">
+              <AlertDialogHeader><AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle><AlertDialogDescription>Se borrarán todos los ejercicios y series. No se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSessionMutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
@@ -240,9 +171,9 @@ export default function SessionDetail() {
       <div className="mb-4">
         {editingNotes ? (
           <div className="space-y-2">
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas de la sesión..." className="text-sm min-h-[60px]" />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas de la sesión..." className="text-sm min-h-[60px] rounded-xl bg-secondary/30 border-border" />
             <div className="flex gap-2">
-              <Button size="sm" onClick={() => saveNotesMutation.mutate()}>Guardar</Button>
+              <Button size="sm" className="gradient-primary text-primary-foreground border-0 rounded-lg" onClick={() => saveNotesMutation.mutate()}>Guardar</Button>
               <Button size="sm" variant="ghost" onClick={() => { setEditingNotes(false); setNotes(session.notes ?? ''); }}>Cancelar</Button>
             </div>
           </div>
@@ -261,38 +192,26 @@ export default function SessionDetail() {
           const isFirst = idx === 0;
           const isLast = idx === (sessionExercises.length - 1);
           return (
-            <AccordionItem key={se.id} value={se.id} className="border rounded-lg px-3">
+            <AccordionItem key={se.id} value={se.id} className="border border-border rounded-xl px-3 bg-card">
               <div className="flex items-center">
                 <div className="flex flex-col mr-1">
                   <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'up' })}><ChevronUp className="h-3 w-3" /></Button>
                   <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'down' })}><ChevronDown className="h-3 w-3" /></Button>
                 </div>
-                <AccordionTrigger className="py-3 text-sm font-medium flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
+                <AccordionTrigger className="py-3 text-sm font-bold flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
                 <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={e => e.stopPropagation()}>
-                      <Trash2 className="h-3 w-3" />
-                    </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle>
-                      <AlertDialogDescription>Se borrarán todas las series de este ejercicio en esta sesión.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
-                    </AlertDialogFooter>
+                  <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
+                  <AlertDialogContent className="bg-card border-border rounded-2xl">
+                    <AlertDialogHeader><AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle><AlertDialogDescription>Se borrarán todas las series de este ejercicio.</AlertDialogDescription></AlertDialogHeader>
+                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
               </div>
               <AccordionContent>
-                <div className="space-y-1">
-                  {sets.map(s => (
-                    <SetRow key={s.id} set={s} trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType} onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })} onDelete={() => deleteSetMutation.mutate(s.id)} />
-                  ))}
+                <div className="space-y-1.5">
+                  {sets.map(s => <SetRow key={s.id} set={s} trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType} onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })} onDelete={() => deleteSetMutation.mutate(s.id)} />)}
                 </div>
-                <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => addSetMutation.mutate(se.id)}>
+                <Button variant="outline" size="sm" className="mt-2 w-full rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => addSetMutation.mutate(se.id)}>
                   <Plus className="h-3 w-3 mr-1" />Serie
                 </Button>
               </AccordionContent>
@@ -303,15 +222,15 @@ export default function SessionDetail() {
 
       <div className="flex gap-2 mt-4">
         <ExerciseSearchSelect exercises={exercises} value={addExId} onChange={setAddExId} />
-        <Button size="icon" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
+        <Button size="icon" className="gradient-primary text-primary-foreground border-0 rounded-lg shrink-0" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
       </div>
 
       {summary && (
-        <div className="mt-6 p-4 rounded-lg bg-card border space-y-2">
-          <h3 className="font-semibold text-sm mb-2">Resumen</h3>
-          {summary.strengthTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Fuerza total</span><span className="font-mono">{summary.strengthTotal.toLocaleString()}</span></div>}
-          {summary.isometricTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Isométricos</span><span className="font-mono">{Math.floor(summary.isometricTotal / 60)}m {summary.isometricTotal % 60}s</span></div>}
-          {summary.cardioTime > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Cardio</span><span className="font-mono">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
+        <div className="mt-6 p-4 rounded-xl bg-card border border-border space-y-2">
+          <h3 className="font-bold text-sm mb-2 text-primary">Resumen</h3>
+          {summary.strengthTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Fuerza total</span><span className="font-mono font-bold">{summary.strengthTotal.toLocaleString()}</span></div>}
+          {summary.isometricTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Isométricos</span><span className="font-mono font-bold">{Math.floor(summary.isometricTotal / 60)}m {summary.isometricTotal % 60}s</span></div>}
+          {summary.cardioTime > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Cardio</span><span className="font-mono font-bold">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
         </div>
       )}
     </div>
