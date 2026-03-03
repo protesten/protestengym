@@ -3,12 +3,23 @@ import type { Tables, TablesInsert, TablesUpdate } from '@/integrations/supabase
 
 export type Muscle = Tables<'muscles'>;
 export type Exercise = Tables<'exercises'>;
+export type PredefinedExercise = Tables<'predefined_exercises'>;
 export type Routine = Tables<'routines'>;
 export type RoutineExercise = Tables<'routine_exercises'>;
 export type Session = Tables<'sessions'>;
 export type SessionExercise = Tables<'session_exercises'>;
 export type WorkoutSet = Tables<'sets'>;
 export type Profile = Tables<'profiles'>;
+
+// Unified exercise type for selectors
+export type AnyExercise = {
+  id: string;
+  name: string;
+  tracking_type: string;
+  primary_muscle_ids: number[] | null;
+  secondary_muscle_ids: number[] | null;
+  source: 'predefined' | 'personal';
+};
 
 // ============ Muscles ============
 export async function getMuscles() {
@@ -17,7 +28,7 @@ export async function getMuscles() {
   return data;
 }
 
-// ============ Exercises ============
+// ============ Exercises (personal) ============
 export async function getExercises() {
   const { data, error } = await supabase.from('exercises').select('*').order('name');
   if (error) throw error;
@@ -40,6 +51,47 @@ export async function updateExercise(id: string, ex: TablesUpdate<'exercises'>) 
 export async function deleteExercise(id: string) {
   const { error } = await supabase.from('exercises').delete().eq('id', id);
   if (error) throw error;
+}
+
+// ============ Predefined Exercises ============
+export async function getPredefinedExercises() {
+  const { data, error } = await supabase.from('predefined_exercises').select('*').order('name');
+  if (error) throw error;
+  return data;
+}
+
+export async function createPredefinedExercise(ex: Omit<TablesInsert<'predefined_exercises'>, 'id' | 'created_at'>) {
+  const { data, error } = await supabase.from('predefined_exercises').insert(ex).select().single();
+  if (error) throw error;
+  return data;
+}
+
+export async function updatePredefinedExercise(id: string, ex: TablesUpdate<'predefined_exercises'>) {
+  const { error } = await supabase.from('predefined_exercises').update(ex).eq('id', id);
+  if (error) throw error;
+}
+
+export async function deletePredefinedExercise(id: string) {
+  const { error } = await supabase.from('predefined_exercises').delete().eq('id', id);
+  if (error) throw error;
+}
+
+// ============ All Exercises (combined for selectors) ============
+export async function getAllExercises(): Promise<AnyExercise[]> {
+  const [personal, predefined] = await Promise.all([getExercises(), getPredefinedExercises()]);
+  const result: AnyExercise[] = [
+    ...(predefined ?? []).map(e => ({ id: e.id, name: e.name, tracking_type: e.tracking_type, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids, source: 'predefined' as const })),
+    ...(personal ?? []).map(e => ({ id: e.id, name: e.name, tracking_type: e.tracking_type, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids, source: 'personal' as const })),
+  ];
+  return result;
+}
+
+// ============ Admin ============
+export async function isAdmin(): Promise<boolean> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return false;
+  const { data } = await supabase.from('user_roles').select('role').eq('user_id', user.id).eq('role', 'admin');
+  return (data?.length ?? 0) > 0;
 }
 
 // ============ Routines ============
