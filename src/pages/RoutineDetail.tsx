@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRoutines, getRoutineExercises, getAllExercises, addRoutineExercise, deleteRoutineExercise, updateRoutineExercise, type AnyExercise } from '@/lib/api';
 import { Button } from '@/components/ui/button';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ArrowLeft, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
 
@@ -66,23 +66,7 @@ export default function RoutineDetail() {
       <h1 className="text-xl font-bold mb-4">{routine.name}</h1>
 
       <div className="flex gap-2 mb-4">
-        <Select value={selectedExId} onValueChange={setSelectedExId}>
-          <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir ejercicio..." /></SelectTrigger>
-          <SelectContent>
-            {exercises?.filter(e => e.source === 'predefined').length ? (
-              <>
-                <SelectItem value="__header_pred" disabled className="text-xs font-semibold text-muted-foreground">— Predefinidos —</SelectItem>
-                {exercises.filter(e => e.source === 'predefined').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-              </>
-            ) : null}
-            {exercises?.filter(e => e.source === 'personal').length ? (
-              <>
-                <SelectItem value="__header_pers" disabled className="text-xs font-semibold text-muted-foreground">— Mis ejercicios —</SelectItem>
-                {exercises.filter(e => e.source === 'personal').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-              </>
-            ) : null}
-          </SelectContent>
-        </Select>
+        <ExerciseSearchSelect exercises={exercises} value={selectedExId} onChange={setSelectedExId} />
         <Button size="icon" onClick={() => addMutation.mutate()} disabled={!selectedExId}><Plus className="h-4 w-4" /></Button>
       </div>
 
