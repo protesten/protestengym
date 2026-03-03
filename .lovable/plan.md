@@ -1,41 +1,73 @@
 
 
-## App de Registro y Análisis de Entrenamientos (MVP Offline)
+## Plan: Sistema completo de progreso
 
-### Tecnología de almacenamiento
-- **Dexie.js** (wrapper sobre IndexedDB) para base de datos local offline-first
-- Todas las tablas y relaciones definidas localmente en el navegador
-- Sin backend/Supabase — funciona 100% sin internet
+Se ampliará la página de Análisis con las 4 funcionalidades solicitadas, añadiendo nuevas pestañas y funciones de cálculo.
 
-### Modelo de datos
-Se crearán 7 tablas en IndexedDB siguiendo exactamente el esquema especificado: Muscle (con seed de 11 músculos), Exercise, Routine, RoutineExercise, WorkoutSession, SessionExercise y Set. Validaciones por tracking_type en la capa de UI/servicio.
+---
 
-### Módulo de cálculos
-Funciones reutilizables para:
-- **work_metric** por ejercicio según tracking_type (solo sets work)
-- **Distribución muscular**: primary 100%, secondary +50% adicional; cardio separado
-- **Comparativas**: última sesión, 7d vs 7d previos, mes vs mes anterior — con valor actual, anterior, diferencia y flecha ↑↓=
+### 1. Historial por ejercicio
 
-### Pantallas
+En la pestaña "Ejercicio" actual, debajo de las comparativas, añadir una sección **"Historial"** que muestre una lista cronológica descendente de todas las sesiones donde se usó ese ejercicio, con:
+- Fecha de la sesión
+- Resumen de series work (ej: "3×80kg×10", "5×12 reps", "3×60s")
+- Métrica total (volumen, reps o tiempo)
 
-1. **Home** — 4 botones: Iniciar sesión, Análisis, Rutinas, Ejercicios
+**Archivo**: `src/db/calculations.ts` — nueva función `getExerciseHistory(exerciseId, trackingType)` que devuelve un array de `{ date, sessionId, sets: WorkoutSet[], totalMetric }`.
 
-2. **Ejercicios** — Lista con búsqueda + CRUD (name, tracking_type, primary/secondary muscle)
+**Archivo**: `src/pages/Analysis.tsx` — renderizar la lista bajo las ComparisonRows.
 
-3. **Rutinas** — Lista + CRUD. Dentro de cada rutina: añadir ejercicios del catálogo, reordenar con drag o botones ↑↓, eliminar
+---
 
-4. **Iniciar sesión** — Elegir fecha (default hoy) → elegir "Desde rutina" o "Sesión libre"
+### 2. Récords personales (PRs)
 
-5. **Sesión en curso** — Lista de ejercicios en accordion. Cada ejercicio muestra sus series con campos dinámicos según tracking_type. Selector de set_type (warmup/approach/work). Guardado inmediato. Botón añadir ejercicio. Resumen inferior: fuerza total, isométricos total, cardio total.
+Añadir una nueva pestaña **"PRs"** al TabsList.
 
-6. **Análisis** con 3 tabs:
-   - **Por ejercicio**: selector → comparativas (última sesión, 7d, mes) con flechas
-   - **Por músculo**: tabla de músculos con volumen fuerza/reps + tiempo isométrico, comparativas 7d y mes
-   - **Por sesión**: historial descendente con totales por sesión
+Funciones en `src/db/calculations.ts`:
+- `getPersonalRecords()` — recorre todos los ejercicios y calcula PRs según tracking_type:
+  - `weight_reps`: peso máximo en una serie, mayor volumen en una serie (peso×reps)
+  - `reps_only`: máximo reps en una serie
+  - `time_only`: máximo duración en una serie
+  - `distance_time`: máxima distancia, máximo tiempo
+- Devuelve para cada PR: valor, fecha, nombre del ejercicio
 
-### UX
-- Diseño limpio, sin distracciones, optimizado para móvil
-- Registro de serie en máximo 3 toques + números
-- Sin gráficos — solo números, flechas y etiquetas claras
-- Navegación inferior o header con tabs
+UI: lista de ejercicios con sus PRs, mostrando valor y fecha.
+
+---
+
+### 3. Gráficos de evolución
+
+En la pestaña "Ejercicio", debajo del historial, añadir un gráfico lineal usando **recharts** (ya instalado) que muestre la métrica total por sesión a lo largo del tiempo.
+
+- Eje X: fechas de las sesiones
+- Eje Y: métrica (volumen, reps, tiempo según tracking_type)
+- Línea simple con puntos
+
+Se reutilizará la data de `getExerciseHistory`.
+
+---
+
+### 4. Resumen semanal/mensual
+
+Nueva pestaña **"Resumen"** que muestre una tabla con:
+- Filas por semana (últimas 8 semanas) o por mes (últimos 6 meses), seleccionable con toggle
+- Columnas: período, nº sesiones, volumen fuerza total, tiempo isométrico, tiempo cardio
+- Barra de progreso visual comparando con el mejor período
+
+Función en `src/db/calculations.ts`: `getPeriodSummaries(granularity: 'week' | 'month')` que agrupa sesiones por período.
+
+---
+
+### Archivos a modificar
+
+| Archivo | Cambio |
+|---|---|
+| `src/db/calculations.ts` | Añadir `getExerciseHistory`, `getPersonalRecords`, `getPeriodSummaries` |
+| `src/pages/Analysis.tsx` | Añadir pestañas PRs y Resumen, historial + gráfico en pestaña Ejercicio |
+
+### Estructura de pestañas resultante
+
+```text
+[ Ejercicio | Músculo | Sesión | PRs | Resumen ]
+```
 
