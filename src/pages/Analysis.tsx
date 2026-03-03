@@ -12,6 +12,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { ComparisonRow } from '@/components/ComparisonRow';
 import { Progress } from '@/components/ui/progress';
+import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
+import { StreakCard } from '@/components/StreakCard';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Trophy, TrendingUp, BarChart3 } from 'lucide-react';
 
@@ -70,8 +72,10 @@ export default function Analysis() {
         <TabsList className="w-full flex-wrap h-auto gap-1 bg-secondary/50 rounded-xl p-1">
           <TabsTrigger value="exercise" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Ejercicio</TabsTrigger>
           <TabsTrigger value="muscle" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Músculo</TabsTrigger>
-          <TabsTrigger value="session" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Sesión</TabsTrigger>
+          <TabsTrigger value="volume" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Volumen</TabsTrigger>
+          <TabsTrigger value="1rm" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>
           <TabsTrigger value="prs" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>
+          <TabsTrigger value="streak" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Racha</TabsTrigger>
           <TabsTrigger value="summary" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
         </TabsList>
 
@@ -80,7 +84,6 @@ export default function Analysis() {
             <SelectTrigger className="rounded-xl bg-card border-border"><SelectValue placeholder="Seleccionar ejercicio" /></SelectTrigger>
             <SelectContent>{exercises?.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
           </Select>
-
           {exComps && (
             <div className="space-y-2">
               <ComparisonRow label="Última sesión" comparison={exComps.lastSession} unit={unitLabel} />
@@ -88,7 +91,6 @@ export default function Analysis() {
               <ComparisonRow label="Mes actual" comparison={exComps.month} unit={unitLabel} />
             </div>
           )}
-
           {chartData.length > 1 && (
             <div className="space-y-2">
               <h3 className="text-sm font-bold flex items-center gap-1.5">
@@ -107,7 +109,6 @@ export default function Analysis() {
               </div>
             </div>
           )}
-
           {history.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-bold">Historial</h3>
@@ -124,7 +125,6 @@ export default function Analysis() {
               </div>
             </div>
           )}
-
           {!selectedExId && <p className="text-center text-muted-foreground text-sm py-8">Selecciona un ejercicio</p>}
         </TabsContent>
 
@@ -147,20 +147,12 @@ export default function Analysis() {
           </div>
         </TabsContent>
 
-        <TabsContent value="session" className="mt-4">
-          <div className="space-y-2">
-            {sessions.map(s => (
-              <Link key={s.sessionId} to={`/session/${s.sessionId}`} className="block p-3.5 rounded-xl bg-card border border-border hover:border-primary/30 transition-colors">
-                <div className="font-semibold text-sm mb-1">{s.date}</div>
-                <div className="flex gap-4 text-xs text-muted-foreground">
-                  {s.strengthTotal > 0 && <span>Fuerza: <span className="font-mono text-foreground font-bold">{s.strengthTotal.toLocaleString()}</span></span>}
-                  {s.isometricTotal > 0 && <span>Iso: <span className="font-mono text-foreground font-bold">{Math.floor(s.isometricTotal / 60)}m</span></span>}
-                  {s.cardioTime > 0 && <span>Cardio: <span className="font-mono text-foreground font-bold">{Math.floor(s.cardioTime / 60)}m</span></span>}
-                </div>
-              </Link>
-            ))}
-            {sessions.length === 0 && <p className="text-center text-muted-foreground text-sm py-8">Sin sesiones</p>}
-          </div>
+        <TabsContent value="volume" className="mt-4">
+          <WeeklyMuscleVolume />
+        </TabsContent>
+
+        <TabsContent value="1rm" className="mt-4">
+          <OneRMPanel />
         </TabsContent>
 
         <TabsContent value="prs" className="mt-4">
@@ -187,6 +179,10 @@ export default function Analysis() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="streak" className="mt-4">
+          <StreakCard />
         </TabsContent>
 
         <TabsContent value="summary" className="mt-4">

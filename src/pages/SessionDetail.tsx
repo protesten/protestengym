@@ -10,7 +10,7 @@ import {
   createSession, getRoutineExercises, getPreviousSetsForExercise,
   type WorkoutSet, type AnyExercise,
 } from '@/lib/api';
-import { getSessionSummary, type SessionSummary } from '@/db/calculations';
+import { getSessionSummary, checkForPR, type SessionSummary } from '@/db/calculations';
 import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType, type PlannedSet } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -202,7 +202,29 @@ export default function SessionDetail() {
   });
 
   const addSetMutation = useMutation({ mutationFn: (seId: string) => createSet(seId), onSuccess: () => invalidateSession() });
-  const updateSetMutation = useMutation({ mutationFn: ({ setId, data }: { setId: string; data: Partial<WorkoutSet> }) => updateSetApi(setId, data), onSuccess: () => invalidateSession() });
+  const [prSets, setPrSets] = useState<Set<string>>(new Set());
+  const updateSetMutation = useMutation({
+    mutationFn: async ({ setId, data, exerciseId }: { setId: string; data: Partial<WorkoutSet>; exerciseId?: string }) => {
+      await updateSetApi(setId, data);
+      // Check for PR after updating weight/reps
+      if (exerciseId && (data.weight != null || data.reps != null || data.duration_seconds != null || data.distance_meters != null)) {
+        const currentSet = allSets?.find(s => s.id === setId);
+        if (currentSet) {
+          const merged = { ...currentSet, ...data } as WorkoutSet;
+          const ex = getExercise(exerciseId);
+          if (ex) {
+            const result = await checkForPR(exerciseId, ex.tracking_type as any, merged);
+            if (result.isPR) {
+              setPrSets(prev => new Set(prev).add(setId));
+              const labels: Record<string, string> = { weight: '¡Nuevo PR de peso!', '1rm': '¡Nuevo PR de 1RM estimado!', reps: '¡Nuevo PR de reps!', volume: '¡Nuevo PR de volumen!', time: '¡Nuevo PR de tiempo!', distance: '¡Nuevo PR de distancia!' };
+              toast.success(`🏆 ${labels[result.prType!] ?? '¡Nuevo PR!'} ${result.newValue}`, { duration: 5000 });
+            }
+          }
+        }
+      }
+    },
+    onSuccess: () => invalidateSession(),
+  });
   const deleteSetMutation = useMutation({ mutationFn: deleteSetApi, onSuccess: () => invalidateSession() });
   const deleteSeMutation = useMutation({ mutationFn: deleteSeApi, onSuccess: () => { toast.success('Ejercicio eliminado'); invalidateSession(); } });
 
@@ -309,7 +331,7 @@ export default function SessionDetail() {
                       trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
                       plannedSet={plannedSets[setIdx]}
                       prevSet={prevSets[setIdx]}
-                      onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })}
+                      onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
                       onDelete={() => deleteSetMutation.mutate(s.id)}
                     />
                   ))}

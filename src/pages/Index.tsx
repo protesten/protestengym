@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getProfile, getRoutines, getSessions } from '@/lib/api';
 import { getAllSessionSummaries, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
+import { StreakCard } from '@/components/StreakCard';
 import { Play, Zap, Calendar, TrendingUp, Dumbbell } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -127,6 +128,9 @@ export default function Index() {
           </div>
         </Link>
       </div>
+
+      {/* Streak Card */}
+      <StreakCard />
 
       {/* Recent Sessions */}
       {sessions && sessions.length > 0 && (
