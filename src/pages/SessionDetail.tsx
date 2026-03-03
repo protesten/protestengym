@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SET_TYPE_LABELS: Record<SetType, string> = { warmup: 'Calentam.', approach: 'Aproxim.', work: 'Trabajo' };
@@ -113,6 +113,19 @@ export default function SessionDetail() {
     toast.success('Ejercicio eliminado');
   }
 
+  async function moveExercise(seId: number, direction: 'up' | 'down') {
+    if (!sessionExercises) return;
+    const idx = sessionExercises.findIndex(se => se.id === seId);
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sessionExercises.length) return;
+    const a = sessionExercises[idx];
+    const b = sessionExercises[swapIdx];
+    await db.transaction('rw', db.sessionExercises, async () => {
+      await db.sessionExercises.update(a.id!, { order_index: b.order_index });
+      await db.sessionExercises.update(b.id!, { order_index: a.order_index });
+    });
+  }
+
   const getExercise = (exId: number) => exercises?.find(e => e.id === exId);
   const getSets = (seId: number) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
@@ -161,12 +174,18 @@ export default function SessionDetail() {
       </div>
 
       <Accordion type="multiple" className="space-y-2">
-        {sessionExercises?.map((se) => {
+        {sessionExercises?.map((se, idx) => {
           const ex = getExercise(se.exercise_id);
           const sets = getSets(se.id!);
+          const isFirst = idx === 0;
+          const isLast = idx === (sessionExercises.length - 1);
           return (
             <AccordionItem key={se.id} value={String(se.id)} className="border rounded-lg px-3">
               <div className="flex items-center">
+                <div className="flex flex-col mr-1">
+                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={() => moveExercise(se.id!, 'up')}><ChevronUp className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExercise(se.id!, 'down')}><ChevronDown className="h-3 w-3" /></Button>
+                </div>
                 <AccordionTrigger className="py-3 text-sm font-medium flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
