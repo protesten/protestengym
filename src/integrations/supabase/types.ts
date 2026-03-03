@@ -14,6 +14,48 @@ export type Database = {
   }
   public: {
     Tables: {
+      body_measurements: {
+        Row: {
+          arm_cm: number | null
+          body_fat_pct: number | null
+          chest_cm: number | null
+          created_at: string
+          date: string
+          id: string
+          notes: string | null
+          thigh_cm: number | null
+          user_id: string
+          waist_cm: number | null
+          weight_kg: number | null
+        }
+        Insert: {
+          arm_cm?: number | null
+          body_fat_pct?: number | null
+          chest_cm?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          thigh_cm?: number | null
+          user_id: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Update: {
+          arm_cm?: number | null
+          body_fat_pct?: number | null
+          chest_cm?: number | null
+          created_at?: string
+          date?: string
+          id?: string
+          notes?: string | null
+          thigh_cm?: number | null
+          user_id?: string
+          waist_cm?: number | null
+          weight_kg?: number | null
+        }
+        Relationships: []
+      }
       exercises: {
         Row: {
           created_at: string
@@ -119,6 +161,75 @@ export type Database = {
           preferences?: Json | null
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      program_weeks: {
+        Row: {
+          id: string
+          notes: string | null
+          program_id: string
+          routine_id: string | null
+          week_number: number
+        }
+        Insert: {
+          id?: string
+          notes?: string | null
+          program_id: string
+          routine_id?: string | null
+          week_number: number
+        }
+        Update: {
+          id?: string
+          notes?: string | null
+          program_id?: string
+          routine_id?: string | null
+          week_number?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "program_weeks_program_id_fkey"
+            columns: ["program_id"]
+            isOneToOne: false
+            referencedRelation: "programs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "program_weeks_routine_id_fkey"
+            columns: ["routine_id"]
+            isOneToOne: false
+            referencedRelation: "routines"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      programs: {
+        Row: {
+          created_at: string
+          deload_week: number | null
+          id: string
+          is_active: boolean
+          name: string
+          user_id: string
+          weeks: number
+        }
+        Insert: {
+          created_at?: string
+          deload_week?: number | null
+          id?: string
+          is_active?: boolean
+          name: string
+          user_id: string
+          weeks?: number
+        }
+        Update: {
+          created_at?: string
+          deload_week?: number | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          user_id?: string
+          weeks?: number
         }
         Relationships: []
       }
@@ -313,6 +424,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      owns_program: { Args: { _program_id: string }; Returns: boolean }
       owns_routine: { Args: { _routine_id: string }; Returns: boolean }
       owns_session: { Args: { _session_id: string }; Returns: boolean }
       owns_session_exercise: { Args: { _se_id: string }; Returns: boolean }
