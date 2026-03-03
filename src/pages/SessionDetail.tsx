@@ -112,7 +112,6 @@ export default function SessionDetail() {
     });
     toast.success('Ejercicio eliminado');
   }
-  }
 
   const getExercise = (exId: number) => exercises?.find(e => e.id === exId);
   const getSets = (seId: number) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
@@ -223,3 +222,4 @@ export default function SessionDetail() {
     </div>
   );
 }
+
