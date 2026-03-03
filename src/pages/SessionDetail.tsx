@@ -105,6 +105,15 @@ export default function SessionDetail() {
     await db.sets.delete(setId);
   }
 
+  async function deleteSessionExercise(seId: number) {
+    await db.transaction('rw', [db.sets, db.sessionExercises], async () => {
+      await db.sets.where({ session_exercise_id: seId }).delete();
+      await db.sessionExercises.delete(seId);
+    });
+    toast.success('Ejercicio eliminado');
+  }
+  }
+
   const getExercise = (exId: number) => exercises?.find(e => e.id === exId);
   const getSets = (seId: number) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
@@ -158,7 +167,26 @@ export default function SessionDetail() {
           const sets = getSets(se.id!);
           return (
             <AccordionItem key={se.id} value={String(se.id)} className="border rounded-lg px-3">
-              <AccordionTrigger className="py-3 text-sm font-medium">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
+              <div className="flex items-center">
+                <AccordionTrigger className="py-3 text-sm font-medium flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={e => e.stopPropagation()}>
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle>
+                      <AlertDialogDescription>Se borrarán todas las series de este ejercicio en esta sesión.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => deleteSessionExercise(se.id!)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
               <AccordionContent>
                 <div className="space-y-1">
                   {sets.map(s => (
