@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
-import { getRoutines, getRoutineExercises, createSession, addSessionExercise } from '@/lib/api';
+import { getRoutines, getRoutineExercises, createSession, addSessionExercise, createSet } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -26,7 +26,11 @@ export default function NewSession() {
       if (mode === 'routine' && routineId) {
         const reList = await getRoutineExercises(routineId);
         for (const re of reList) {
-          await addSessionExercise(session.id, re.exercise_id, re.order_index);
+          const newSe = await addSessionExercise(session.id, re.exercise_id, re.order_index);
+          const plannedSets = Array.isArray((re as any).planned_sets) ? (re as any).planned_sets : [];
+          for (const ps of plannedSets) {
+            await createSet(newSe.id, ps.set_type || 'work', ps.rpe ?? null);
+          }
         }
       }
 

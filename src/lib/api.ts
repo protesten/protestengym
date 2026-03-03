@@ -126,8 +126,13 @@ export async function getRoutineExercises(routineId: string) {
   return data;
 }
 
-export async function addRoutineExercise(routineId: string, exerciseId: string, orderIndex: number) {
-  const { error } = await supabase.from('routine_exercises').insert({ routine_id: routineId, exercise_id: exerciseId, order_index: orderIndex });
+export async function addRoutineExercise(routineId: string, exerciseId: string, orderIndex: number, plannedSets?: any[]) {
+  const { error } = await supabase.from('routine_exercises').insert({
+    routine_id: routineId,
+    exercise_id: exerciseId,
+    order_index: orderIndex,
+    ...(plannedSets !== undefined ? { planned_sets: plannedSets } : {}),
+  } as any);
   if (error) throw error;
 }
 
@@ -212,8 +217,12 @@ export async function getSetsBySession(sessionId: string) {
   return data ?? [];
 }
 
-export async function createSet(sessionExerciseId: string, setType: string = 'work') {
-  const { data, error } = await supabase.from('sets').insert({ session_exercise_id: sessionExerciseId, set_type: setType as any }).select().single();
+export async function createSet(sessionExerciseId: string, setType: string = 'work', rpe?: number | null) {
+  const { data, error } = await supabase.from('sets').insert({
+    session_exercise_id: sessionExerciseId,
+    set_type: setType as any,
+    ...(rpe != null ? { rpe } : {}),
+  } as any).select().single();
   if (error) throw error;
   return data;
 }
