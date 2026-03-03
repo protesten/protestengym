@@ -24,6 +24,24 @@ import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, Cale
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
+function NumericInput({ value, placeholder, className, onSave }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void }) {
+  const [local, setLocal] = useState(value?.toString() ?? '');
+  useEffect(() => { setLocal(value?.toString() ?? ''); }, [value]);
+  return (
+    <Input
+      inputMode="decimal"
+      placeholder={placeholder}
+      className={className}
+      value={local}
+      onChange={e => setLocal(e.target.value)}
+      onBlur={() => {
+        const parsed = local.trim() === '' ? null : Number(local);
+        if (parsed !== value) onSave(parsed);
+      }}
+    />
+  );
+}
+
 function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   return (
     <div className="flex items-center gap-2 py-1">
@@ -35,20 +53,20 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
       </Select>
       {(trackingType === 'weight_reps') && (
         <>
-          <Input type="number" placeholder="kg" className="w-16 h-8 text-xs" value={set.weight ?? ''} onChange={e => onUpdate({ weight: e.target.value ? Number(e.target.value) : undefined })} />
-          <Input type="number" placeholder="reps" className="w-16 h-8 text-xs" value={set.reps ?? ''} onChange={e => onUpdate({ reps: e.target.value ? Number(e.target.value) : undefined })} />
+          <NumericInput value={set.weight} placeholder="kg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
+          <NumericInput value={set.reps} placeholder="reps" className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
         </>
       )}
       {trackingType === 'reps_only' && (
-        <Input type="number" placeholder="reps" className="w-20 h-8 text-xs" value={set.reps ?? ''} onChange={e => onUpdate({ reps: e.target.value ? Number(e.target.value) : undefined })} />
+        <NumericInput value={set.reps} placeholder="reps" className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
       )}
       {trackingType === 'time_only' && (
-        <Input type="number" placeholder="seg" className="w-20 h-8 text-xs" value={set.duration_seconds ?? ''} onChange={e => onUpdate({ duration_seconds: e.target.value ? Number(e.target.value) : undefined })} />
+        <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
       )}
       {trackingType === 'distance_time' && (
         <>
-          <Input type="number" placeholder="seg" className="w-16 h-8 text-xs" value={set.duration_seconds ?? ''} onChange={e => onUpdate({ duration_seconds: e.target.value ? Number(e.target.value) : undefined })} />
-          <Input type="number" placeholder="m" className="w-16 h-8 text-xs" value={set.distance_meters ?? ''} onChange={e => onUpdate({ distance_meters: e.target.value ? Number(e.target.value) : undefined })} />
+          <NumericInput value={set.duration_seconds} placeholder="seg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
+          <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
         </>
       )}
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
