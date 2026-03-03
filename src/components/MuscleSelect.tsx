@@ -5,8 +5,8 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { MUSCLE_GROUPS } from '@/db';
-import type { Muscle } from '@/db';
+import { MUSCLE_GROUPS } from '@/lib/constants';
+import type { Muscle } from '@/lib/api';
 
 interface MuscleSelectProps {
   muscles: Muscle[] | undefined;
@@ -63,8 +63,8 @@ export default function MuscleSelect({ muscles, value, onChange, placeholder = '
               return (
                 <CommandGroup key={group} heading={group}>
                   {groupMuscles.map(m => (
-                    <CommandItem key={m.id} value={m.name} onSelect={() => toggle(m.id!)}>
-                      <Check className={cn('mr-2 h-4 w-4', value.includes(m.id!) ? 'opacity-100' : 'opacity-0')} />
+                    <CommandItem key={m.id} value={m.name} onSelect={() => toggle(m.id)}>
+                      <Check className={cn('mr-2 h-4 w-4', value.includes(m.id) ? 'opacity-100' : 'opacity-0')} />
                       {m.name}
                     </CommandItem>
                   ))}

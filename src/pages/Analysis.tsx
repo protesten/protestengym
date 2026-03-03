@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db';
+import { useQuery } from '@tanstack/react-query';
+import { getExercises } from '@/lib/api';
 import {
   getExerciseComparisons, getMuscleComparisons, getAllSessionSummaries,
   getExerciseHistory, formatSetSummary, getPersonalRecords, getPeriodSummaries,
@@ -21,7 +21,7 @@ function ArrowBadge({ c }: { c: Comparison }) {
 }
 
 export default function Analysis() {
-  const exercises = useLiveQuery(() => db.exercises.toArray());
+  const { data: exercises } = useQuery({ queryKey: ['exercises'], queryFn: getExercises });
   const [selectedExId, setSelectedExId] = useState('');
   const [exComps, setExComps] = useState<{ week: any; month: any; lastSession: any } | null>(null);
   const [muscleData, setMuscleData] = useState<{ week: MuscleVolume[]; month: MuscleVolume[] }>({ week: [], month: [] });
@@ -32,12 +32,12 @@ export default function Analysis() {
   const [periodData, setPeriodData] = useState<PeriodSummary[]>([]);
   const [periodGranularity, setPeriodGranularity] = useState<'week' | 'month'>('week');
 
-  const selectedEx = exercises?.find(e => e.id === Number(selectedExId));
+  const selectedEx = exercises?.find(e => e.id === selectedExId);
 
   useEffect(() => {
     if (!selectedExId || !selectedEx) return;
-    getExerciseComparisons(selectedEx.id!, selectedEx.tracking_type).then(setExComps);
-    getExerciseHistory(selectedEx.id!, selectedEx.tracking_type).then(setHistory);
+    getExerciseComparisons(selectedEx.id, selectedEx.tracking_type).then(setExComps);
+    getExerciseHistory(selectedEx.id, selectedEx.tracking_type).then(setHistory);
   }, [selectedExId, exercises]);
 
   useEffect(() => {
@@ -61,13 +61,11 @@ export default function Analysis() {
     : 'Tiempo (s)'
     : '';
 
-  // Chart data (chronological order)
   const chartData = [...history].reverse().map(h => ({
-    date: h.date.slice(5), // MM-DD
+    date: h.date.slice(5),
     value: h.totalMetric,
   }));
 
-  // Period summary max values for progress bars
   const maxStrength = Math.max(...periodData.map(p => p.strengthTotal), 1);
   const maxIso = Math.max(...periodData.map(p => p.isometricTotal), 1);
 
@@ -83,12 +81,11 @@ export default function Analysis() {
           <TabsTrigger value="summary" className="flex-1 text-xs">Resumen</TabsTrigger>
         </TabsList>
 
-        {/* ========== EJERCICIO TAB ========== */}
         <TabsContent value="exercise" className="space-y-4 mt-4">
           <Select value={selectedExId} onValueChange={setSelectedExId}>
             <SelectTrigger><SelectValue placeholder="Seleccionar ejercicio" /></SelectTrigger>
             <SelectContent>
-              {exercises?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+              {exercises?.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
             </SelectContent>
           </Select>
 
@@ -101,7 +98,6 @@ export default function Analysis() {
             </div>
           )}
 
-          {/* Evolution Chart */}
           {chartData.length > 1 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold flex items-center gap-1.5">
@@ -125,7 +121,6 @@ export default function Analysis() {
             </div>
           )}
 
-          {/* Exercise History */}
           {history.length > 0 && (
             <div className="space-y-2">
               <h3 className="text-sm font-semibold">Historial</h3>
@@ -146,7 +141,6 @@ export default function Analysis() {
           {!selectedExId && <p className="text-center text-muted-foreground text-sm py-8">Selecciona un ejercicio</p>}
         </TabsContent>
 
-        {/* ========== MÚSCULO TAB ========== */}
         <TabsContent value="muscle" className="mt-4">
           <div className="flex gap-2 mb-4">
             <button onClick={() => setMusclePeriod('7d')} className={`text-sm px-3 py-1 rounded-full ${musclePeriod === '7d' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>7 días</button>
@@ -166,7 +160,6 @@ export default function Analysis() {
           </div>
         </TabsContent>
 
-        {/* ========== SESIÓN TAB ========== */}
         <TabsContent value="session" className="mt-4">
           <div className="space-y-2">
             {sessions.map(s => (
@@ -183,7 +176,6 @@ export default function Analysis() {
           </div>
         </TabsContent>
 
-        {/* ========== PRs TAB ========== */}
         <TabsContent value="prs" className="mt-4">
           {prs.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">Sin récords aún. Completa sesiones para ver tus PRs.</p>
@@ -210,7 +202,6 @@ export default function Analysis() {
           )}
         </TabsContent>
 
-        {/* ========== RESUMEN TAB ========== */}
         <TabsContent value="summary" className="mt-4">
           <div className="flex gap-2 mb-4">
             <button onClick={() => setPeriodGranularity('week')} className={`text-sm px-3 py-1 rounded-full ${periodGranularity === 'week' ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>Semanal</button>

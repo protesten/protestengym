@@ -1,9 +1,16 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
-import { db, type WorkoutSet, type SetType, type TrackingType } from '@/db';
+import {
+  getSession, getSessionExercises, getExercises, getSetsBySession,
+  updateSession, deleteSession as deleteSessionApi, addSessionExercise,
+  createSet, updateSet as updateSetApi, deleteSet as deleteSetApi,
+  deleteSessionExercise as deleteSeApi, updateSessionExercise,
+  createSession, type WorkoutSet,
+} from '@/lib/api';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
+import { SET_TYPE_LABELS, type SetType, type TrackingType } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -15,8 +22,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-
-const SET_TYPE_LABELS: Record<SetType, string> = { warmup: 'Calentam.', approach: 'Aproxim.', work: 'Trabajo' };
 
 function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   return (
@@ -53,11 +58,13 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
 export default function SessionDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const sessionId = Number(id);
-  const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId]);
-  const sessionExercises = useLiveQuery(() => db.sessionExercises.where({ session_id: sessionId }).sortBy('order_index'), [sessionId]);
-  const exercises = useLiveQuery(() => db.exercises.toArray());
-  const allSets = useLiveQuery(() => db.sets.toArray(), []);
+  const queryClient = useQueryClient();
+  const sessionId = id!;
+
+  const { data: session } = useQuery({ queryKey: ['session', sessionId], queryFn: () => getSession(sessionId) });
+  const { data: sessionExercises } = useQuery({ queryKey: ['session_exercises', sessionId], queryFn: () => getSessionExercises(sessionId) });
+  const { data: exercises } = useQuery({ queryKey: ['exercises'], queryFn: getExercises });
+  const { data: allSets } = useQuery({ queryKey: ['sets', sessionId], queryFn: () => getSetsBySession(sessionId) });
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [addExId, setAddExId] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
@@ -71,82 +78,86 @@ export default function SessionDetail() {
     getSessionSummary(sessionId).then(setSummary);
   }, [sessionId, allSets]);
 
-  async function saveNotes() {
-    await db.sessions.update(sessionId, { notes });
-    setEditingNotes(false);
-    toast.success('Notas guardadas');
-  }
+  const invalidateSession = () => {
+    queryClient.invalidateQueries({ queryKey: ['session', sessionId] });
+    queryClient.invalidateQueries({ queryKey: ['session_exercises', sessionId] });
+    queryClient.invalidateQueries({ queryKey: ['sets', sessionId] });
+  };
 
-  async function deleteSession() {
-    const seIds = (await db.sessionExercises.where({ session_id: sessionId }).toArray()).map(se => se.id!);
-    await db.transaction('rw', [db.sets, db.sessionExercises, db.sessions], async () => {
-      for (const seId of seIds) {
-        await db.sets.where({ session_exercise_id: seId }).delete();
+  const saveNotesMutation = useMutation({
+    mutationFn: () => updateSession(sessionId, { notes }),
+    onSuccess: () => { setEditingNotes(false); toast.success('Notas guardadas'); invalidateSession(); },
+  });
+
+  const deleteSessionMutation = useMutation({
+    mutationFn: () => deleteSessionApi(sessionId),
+    onSuccess: () => { toast.success('Sesión eliminada'); navigate('/'); },
+  });
+
+  const duplicateMutation = useMutation({
+    mutationFn: async () => {
+      const today = new Date().toISOString().slice(0, 10);
+      const newSession = await createSession({ date: today, routine_id: session?.routine_id, notes: session?.notes });
+      if (sessionExercises) {
+        for (const se of sessionExercises) {
+          const newSe = await addSessionExercise(newSession.id, se.exercise_id, se.order_index);
+          const sets = allSets?.filter(s => s.session_exercise_id === se.id) ?? [];
+          for (const s of sets) {
+            await createSet(newSe.id, s.set_type);
+            // Note: duplicated sets start empty, user fills values
+          }
+        }
       }
-      await db.sessionExercises.where({ session_id: sessionId }).delete();
-      await db.sessions.delete(sessionId);
-    });
-    toast.success('Sesión eliminada');
-    navigate('/');
-  }
+      return newSession.id;
+    },
+    onSuccess: (newId) => { toast.success('Sesión duplicada'); navigate(`/session/${newId}`); },
+  });
 
-  async function duplicateSession() {
-    const today = new Date().toISOString().slice(0, 10);
-    const newSessionId = await db.sessions.add({ date: today, routine_id: session?.routine_id, notes: session?.notes });
-    const seList = await db.sessionExercises.where({ session_id: sessionId }).sortBy('order_index');
-    for (const se of seList) {
-      const newSeId = await db.sessionExercises.add({ session_id: newSessionId as number, exercise_id: se.exercise_id, order_index: se.order_index });
-      const sets = await db.sets.where({ session_exercise_id: se.id! }).toArray();
-      for (const s of sets) {
-        await db.sets.add({ session_exercise_id: newSeId as number, set_type: s.set_type, weight: s.weight, reps: s.reps, duration_seconds: s.duration_seconds, distance_meters: s.distance_meters });
-      }
-    }
-    toast.success('Sesión duplicada');
-    navigate(`/session/${newSessionId}`);
-  }
+  const addExMutation = useMutation({
+    mutationFn: async () => {
+      if (!addExId) return;
+      const maxOrder = sessionExercises?.length ? Math.max(...sessionExercises.map(se => se.order_index)) : -1;
+      await addSessionExercise(sessionId, addExId, maxOrder + 1);
+    },
+    onSuccess: () => { setAddExId(''); invalidateSession(); },
+  });
 
-  async function addExercise() {
-    if (!addExId) return;
-    const maxOrder = sessionExercises?.length ? Math.max(...sessionExercises.map(se => se.order_index)) : -1;
-    await db.sessionExercises.add({ session_id: sessionId, exercise_id: Number(addExId), order_index: maxOrder + 1 });
-    setAddExId('');
-  }
+  const addSetMutation = useMutation({
+    mutationFn: (seId: string) => createSet(seId),
+    onSuccess: () => invalidateSession(),
+  });
 
-  async function addSet(seId: number) {
-    await db.sets.add({ session_exercise_id: seId, set_type: 'work' });
-  }
+  const updateSetMutation = useMutation({
+    mutationFn: ({ setId, data }: { setId: string; data: Partial<WorkoutSet> }) => updateSetApi(setId, data),
+    onSuccess: () => invalidateSession(),
+  });
 
-  async function updateSet(setId: number, data: Partial<WorkoutSet>) {
-    await db.sets.update(setId, data);
-  }
+  const deleteSetMutation = useMutation({
+    mutationFn: deleteSetApi,
+    onSuccess: () => invalidateSession(),
+  });
 
-  async function deleteSet(setId: number) {
-    await db.sets.delete(setId);
-  }
+  const deleteSeMutation = useMutation({
+    mutationFn: deleteSeApi,
+    onSuccess: () => { toast.success('Ejercicio eliminado'); invalidateSession(); },
+  });
 
-  async function deleteSessionExercise(seId: number) {
-    await db.transaction('rw', [db.sets, db.sessionExercises], async () => {
-      await db.sets.where({ session_exercise_id: seId }).delete();
-      await db.sessionExercises.delete(seId);
-    });
-    toast.success('Ejercicio eliminado');
-  }
+  const moveExMutation = useMutation({
+    mutationFn: async ({ seId, direction }: { seId: string; direction: 'up' | 'down' }) => {
+      if (!sessionExercises) return;
+      const idx = sessionExercises.findIndex(se => se.id === seId);
+      const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (swapIdx < 0 || swapIdx >= sessionExercises.length) return;
+      const a = sessionExercises[idx];
+      const b = sessionExercises[swapIdx];
+      await updateSessionExercise(a.id, { order_index: b.order_index });
+      await updateSessionExercise(b.id, { order_index: a.order_index });
+    },
+    onSuccess: () => invalidateSession(),
+  });
 
-  async function moveExercise(seId: number, direction: 'up' | 'down') {
-    if (!sessionExercises) return;
-    const idx = sessionExercises.findIndex(se => se.id === seId);
-    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= sessionExercises.length) return;
-    const a = sessionExercises[idx];
-    const b = sessionExercises[swapIdx];
-    await db.transaction('rw', db.sessionExercises, async () => {
-      await db.sessionExercises.update(a.id!, { order_index: b.order_index });
-      await db.sessionExercises.update(b.id!, { order_index: a.order_index });
-    });
-  }
-
-  const getExercise = (exId: number) => exercises?.find(e => e.id === exId);
-  const getSets = (seId: number) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
+  const getExercise = (exId: string) => exercises?.find(e => e.id === exId);
+  const getSets = (seId: string) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
   if (!session) return <div className="p-4">Cargando...</div>;
 
@@ -170,7 +181,8 @@ export default function SessionDetail() {
               onSelect={async (date) => {
                 if (date) {
                   const newDate = format(date, 'yyyy-MM-dd');
-                  await db.sessions.update(sessionId, { date: newDate });
+                  await updateSession(sessionId, { date: newDate });
+                  invalidateSession();
                   toast.success('Fecha actualizada');
                 }
               }}
@@ -180,32 +192,31 @@ export default function SessionDetail() {
           </PopoverContent>
         </Popover>
         <div className="flex gap-1">
-          <Button variant="ghost" size="icon" onClick={duplicateSession} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" onClick={() => duplicateMutation.mutate()} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
           <AlertDialog>
             <AlertDialogTrigger asChild>
               <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
             </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
-              <AlertDialogDescription>Se borrarán todos los ejercicios y series de esta sesión. Esta acción no se puede deshacer.</AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancelar</AlertDialogCancel>
-              <AlertDialogAction onClick={deleteSession} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
+                <AlertDialogDescription>Se borrarán todos los ejercicios y series de esta sesión. Esta acción no se puede deshacer.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={() => deleteSessionMutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       </div>
 
-      {/* Notes section */}
       <div className="mb-4">
         {editingNotes ? (
           <div className="space-y-2">
             <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas de la sesión..." className="text-sm min-h-[60px]" />
             <div className="flex gap-2">
-              <Button size="sm" onClick={saveNotes}>Guardar</Button>
+              <Button size="sm" onClick={() => saveNotesMutation.mutate()}>Guardar</Button>
               <Button size="sm" variant="ghost" onClick={() => { setEditingNotes(false); setNotes(session.notes ?? ''); }}>Cancelar</Button>
             </div>
           </div>
@@ -220,15 +231,15 @@ export default function SessionDetail() {
       <Accordion type="multiple" className="space-y-2">
         {sessionExercises?.map((se, idx) => {
           const ex = getExercise(se.exercise_id);
-          const sets = getSets(se.id!);
+          const sets = getSets(se.id);
           const isFirst = idx === 0;
           const isLast = idx === (sessionExercises.length - 1);
           return (
-            <AccordionItem key={se.id} value={String(se.id)} className="border rounded-lg px-3">
+            <AccordionItem key={se.id} value={se.id} className="border rounded-lg px-3">
               <div className="flex items-center">
                 <div className="flex flex-col mr-1">
-                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={() => moveExercise(se.id!, 'up')}><ChevronUp className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExercise(se.id!, 'down')}><ChevronDown className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'up' })}><ChevronUp className="h-3 w-3" /></Button>
+                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'down' })}><ChevronDown className="h-3 w-3" /></Button>
                 </div>
                 <AccordionTrigger className="py-3 text-sm font-medium flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
                 <AlertDialog>
@@ -244,7 +255,7 @@ export default function SessionDetail() {
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                       <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction onClick={() => deleteSessionExercise(se.id!)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
+                      <AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction>
                     </AlertDialogFooter>
                   </AlertDialogContent>
                 </AlertDialog>
@@ -252,10 +263,10 @@ export default function SessionDetail() {
               <AccordionContent>
                 <div className="space-y-1">
                   {sets.map(s => (
-                    <SetRow key={s.id} set={s} trackingType={ex?.tracking_type ?? 'weight_reps'} onUpdate={data => updateSet(s.id!, data)} onDelete={() => deleteSet(s.id!)} />
+                    <SetRow key={s.id} set={s} trackingType={ex?.tracking_type ?? 'weight_reps'} onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })} onDelete={() => deleteSetMutation.mutate(s.id)} />
                   ))}
                 </div>
-                <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => addSet(se.id!)}>
+                <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => addSetMutation.mutate(se.id)}>
                   <Plus className="h-3 w-3 mr-1" />Serie
                 </Button>
               </AccordionContent>
@@ -268,10 +279,10 @@ export default function SessionDetail() {
         <Select value={addExId} onValueChange={setAddExId}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir ejercicio..." /></SelectTrigger>
           <SelectContent>
-            {exercises?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+            {exercises?.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
           </SelectContent>
         </Select>
-        <Button size="icon" onClick={addExercise} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
+        <Button size="icon" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
       </div>
 
       {summary && (
@@ -285,4 +296,3 @@ export default function SessionDetail() {
     </div>
   );
 }
-
