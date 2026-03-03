@@ -121,18 +121,21 @@ export type Database = {
           exercise_id: string
           id: string
           order_index: number
+          planned_sets: Json | null
           routine_id: string
         }
         Insert: {
           exercise_id: string
           id?: string
           order_index?: number
+          planned_sets?: Json | null
           routine_id: string
         }
         Update: {
           exercise_id?: string
           id?: string
           order_index?: number
+          planned_sets?: Json | null
           routine_id?: string
         }
         Relationships: [
@@ -237,6 +240,7 @@ export type Database = {
           duration_seconds: number | null
           id: string
           reps: number | null
+          rpe: number | null
           session_exercise_id: string
           set_type: Database["public"]["Enums"]["set_type"]
           weight: number | null
@@ -247,6 +251,7 @@ export type Database = {
           duration_seconds?: number | null
           id?: string
           reps?: number | null
+          rpe?: number | null
           session_exercise_id: string
           set_type?: Database["public"]["Enums"]["set_type"]
           weight?: number | null
@@ -257,6 +262,7 @@ export type Database = {
           duration_seconds?: number | null
           id?: string
           reps?: number | null
+          rpe?: number | null
           session_exercise_id?: string
           set_type?: Database["public"]["Enums"]["set_type"]
           weight?: number | null

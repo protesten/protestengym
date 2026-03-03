@@ -29,3 +29,12 @@ export const SET_TYPE_LABELS: Record<SetType, string> = {
   approach: 'Aproxim.',
   work: 'Trabajo',
 };
+
+export const RPE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
+
+export type PlannedSet = {
+  set_type: SetType;
+  rpe: number | null;
+  min_reps: number | null;
+  max_reps: number | null;
+};

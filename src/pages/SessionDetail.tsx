@@ -10,7 +10,7 @@ import {
   createSession, type WorkoutSet, type AnyExercise,
 } from '@/lib/api';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
-import { SET_TYPE_LABELS, type SetType, type TrackingType } from '@/lib/constants';
+import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -43,8 +43,9 @@ function NumericInput({ value, placeholder, className, onSave }: { value: number
 }
 
 function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
+  const rpeValue = (set as any).rpe;
   return (
-    <div className="flex items-center gap-2 py-1">
+    <div className="flex items-center gap-1.5 py-1 flex-wrap">
       <Select value={set.set_type} onValueChange={v => onUpdate({ set_type: v as SetType })}>
         <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
         <SelectContent>
@@ -69,6 +70,12 @@ function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; tr
           <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
         </>
       )}
+      <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
+        <SelectTrigger className="w-20 h-8 text-xs"><SelectValue placeholder="RPE" /></SelectTrigger>
+        <SelectContent>
+          {RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}
+        </SelectContent>
+      </Select>
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
   );

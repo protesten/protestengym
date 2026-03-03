@@ -2,10 +2,49 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRoutines, getRoutineExercises, getAllExercises, addRoutineExercise, deleteRoutineExercise, updateRoutineExercise, type AnyExercise } from '@/lib/api';
+import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type PlannedSet } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ArrowLeft, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
+
+const DEFAULT_PLANNED_SET: PlannedSet = { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12 };
+
+function PlannedSetRow({ ps, index, onChange, onDelete }: { ps: PlannedSet; index: number; onChange: (ps: PlannedSet) => void; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-1.5 py-1">
+      <span className="text-xs text-muted-foreground w-6 shrink-0">S{index + 1}</span>
+      <Select value={ps.set_type} onValueChange={v => onChange({ ...ps, set_type: v as SetType })}>
+        <SelectTrigger className="w-24 h-7 text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Select value={ps.rpe?.toString() ?? ''} onValueChange={v => onChange({ ...ps, rpe: v ? Number(v) : null })}>
+        <SelectTrigger className="w-20 h-7 text-xs"><SelectValue placeholder="RPE" /></SelectTrigger>
+        <SelectContent>
+          {RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      <Input
+        type="number" inputMode="numeric" placeholder="min"
+        className="w-14 h-7 text-xs"
+        value={ps.min_reps ?? ''}
+        onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })}
+      />
+      <span className="text-xs text-muted-foreground">-</span>
+      <Input
+        type="number" inputMode="numeric" placeholder="max"
+        className="w-14 h-7 text-xs"
+        value={ps.max_reps ?? ''}
+        onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })}
+      />
+      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+    </div>
+  );
+}
 
 export default function RoutineDetail() {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +93,34 @@ export default function RoutineDetail() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['routine_exercises', routineId] }),
   });
 
+  const updatePlannedSetsMutation = useMutation({
+    mutationFn: async ({ reId, plannedSets }: { reId: string; plannedSets: PlannedSet[] }) => {
+      await updateRoutineExercise(reId, { planned_sets: plannedSets } as any);
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['routine_exercises', routineId] }),
+  });
+
+  const getPlannedSets = (re: any): PlannedSet[] => {
+    const ps = re.planned_sets;
+    if (Array.isArray(ps)) return ps;
+    return [];
+  };
+
+  const handleAddPlannedSet = (reId: string, current: PlannedSet[]) => {
+    updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, { ...DEFAULT_PLANNED_SET }] });
+  };
+
+  const handleUpdatePlannedSet = (reId: string, current: PlannedSet[], index: number, updated: PlannedSet) => {
+    const next = [...current];
+    next[index] = updated;
+    updatePlannedSetsMutation.mutate({ reId, plannedSets: next });
+  };
+
+  const handleDeletePlannedSet = (reId: string, current: PlannedSet[], index: number) => {
+    const next = current.filter((_, i) => i !== index);
+    updatePlannedSetsMutation.mutate({ reId, plannedSets: next });
+  };
+
   const exName = (exId: string) => exercises?.find(e => e.id === exId)?.name ?? 'Desconocido';
 
   if (!routine) return <div className="p-4">Cargando...</div>;
@@ -71,15 +138,34 @@ export default function RoutineDetail() {
       </div>
 
       <div className="space-y-2">
-        {routineExercises?.map((re, i) => (
-          <div key={re.id} className="flex items-center gap-2 p-3 rounded-lg bg-card border">
-            <span className="text-xs text-muted-foreground w-6">{i + 1}</span>
-            <span className="flex-1 text-sm font-medium">{exName(re.exercise_id)}</span>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveMutation.mutate({ reId: re.id, direction: -1 })} disabled={i === 0}><ArrowUp className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveMutation.mutate({ reId: re.id, direction: 1 })} disabled={i === (routineExercises?.length ?? 0) - 1}><ArrowDown className="h-3 w-3" /></Button>
-            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeMutation.mutate(re.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
-          </div>
-        ))}
+        {routineExercises?.map((re, i) => {
+          const plannedSets = getPlannedSets(re);
+          return (
+            <div key={re.id} className="p-3 rounded-lg bg-card border">
+              <div className="flex items-center gap-2">
+                <span className="text-xs text-muted-foreground w-6">{i + 1}</span>
+                <span className="flex-1 text-sm font-medium">{exName(re.exercise_id)}</span>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveMutation.mutate({ reId: re.id, direction: -1 })} disabled={i === 0}><ArrowUp className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => moveMutation.mutate({ reId: re.id, direction: 1 })} disabled={i === (routineExercises?.length ?? 0) - 1}><ArrowDown className="h-3 w-3" /></Button>
+                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => removeMutation.mutate(re.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+              </div>
+              <div className="mt-2 ml-6 space-y-0.5">
+                {plannedSets.map((ps, j) => (
+                  <PlannedSetRow
+                    key={j}
+                    ps={ps}
+                    index={j}
+                    onChange={updated => handleUpdatePlannedSet(re.id, plannedSets, j, updated)}
+                    onDelete={() => handleDeletePlannedSet(re.id, plannedSets, j)}
+                  />
+                ))}
+                <Button variant="outline" size="sm" className="mt-1 w-full text-xs h-7" onClick={() => handleAddPlannedSet(re.id, plannedSets)}>
+                  <Plus className="h-3 w-3 mr-1" />Añadir serie
+                </Button>
+              </div>
+            </div>
+          );
+        })}
         {(!routineExercises || routineExercises.length === 0) && <p className="text-center text-muted-foreground text-sm py-4">Sin ejercicios aún</p>}
       </div>
     </div>
