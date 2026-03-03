@@ -77,10 +77,17 @@ function SetRow({ set, trackingType, plannedSet, onUpdate, onDelete }: { set: Wo
           <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
         </>
       )}
-      <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
-        <SelectTrigger className="w-20 h-8 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
-        <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
-      </Select>
+      <div className="flex items-center gap-1">
+        <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
+          <SelectTrigger className={cn("w-20 h-8 text-xs rounded-md bg-card border-border", plannedSet?.rpe != null && rpeValue == null && "border-primary/30")}><SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} /></SelectTrigger>
+          <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
+        </Select>
+        {plannedSet?.rpe != null && (
+          <span className="text-[10px] font-mono text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded shrink-0" title="RPE pautado">
+            @{plannedSet.rpe}
+          </span>
+        )}
+      </div>
       <RepRangeBadge plannedSet={plannedSet} />
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
