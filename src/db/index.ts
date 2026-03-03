@@ -96,18 +96,63 @@ const ALL_MUSCLES = [
   'Serrato anterior',
 ];
 
+// Mapping from old generic muscles to new detailed ones
+const OLD_TO_NEW: Record<string, string> = {
+  'Pecho': 'Pectoral mayor',
+  'Espalda': 'Dorsal ancho',
+  'Hombros': 'Deltoides lateral',
+  'Bíceps': 'Bíceps braquial',
+  'Tríceps': 'Tríceps braquial (cabeza larga)',
+  'Cuádriceps': 'Recto femoral',
+  'Isquios': 'Bíceps femoral',
+  'Glúteos': 'Glúteo mayor',
+  'Gemelos': 'Gastrocnemio lateral (Gemelo)',
+  'Core': 'Recto abdominal',
+  'Lumbar': 'Erectores espinales',
+};
+
 // Seed on first load
 db.on('populate', (tx) => {
   const muscleTable = tx.table('muscles');
   ALL_MUSCLES.forEach((name) => muscleTable.add({ name }));
 });
 
-// Add missing muscles on upgrade for existing users
+// Add missing muscles + migrate old ones for existing users
 db.on('ready', async () => {
   const existing = await db.muscles.toArray();
   const existingNames = new Set(existing.map(m => m.name));
+
+  // 1. Add any missing new muscles
   const toAdd = ALL_MUSCLES.filter(n => !existingNames.has(n));
   if (toAdd.length > 0) {
     await db.muscles.bulkAdd(toAdd.map(name => ({ name })));
+  }
+
+  // 2. Migrate exercises from old muscles to new, then delete old muscles
+  const allMuscles = await db.muscles.toArray();
+  const nameToId = new Map(allMuscles.map(m => [m.name, m.id!]));
+  const oldMuscles = allMuscles.filter(m => m.name in OLD_TO_NEW);
+
+  if (oldMuscles.length > 0) {
+    for (const old of oldMuscles) {
+      const newName = OLD_TO_NEW[old.name];
+      const newId = nameToId.get(newName);
+      if (!newId) continue;
+
+      // Update exercises referencing this old muscle
+      const primaryExercises = await db.exercises.where('primary_muscle_id').equals(old.id!).toArray();
+      for (const ex of primaryExercises) {
+        await db.exercises.update(ex.id!, { primary_muscle_id: newId });
+      }
+      const allExercises = await db.exercises.toArray();
+      for (const ex of allExercises) {
+        if (ex.secondary_muscle_id === old.id!) {
+          await db.exercises.update(ex.id!, { secondary_muscle_id: newId });
+        }
+      }
+
+      // Delete old muscle
+      await db.muscles.delete(old.id!);
+    }
   }
 });
