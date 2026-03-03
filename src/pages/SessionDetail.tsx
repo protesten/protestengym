@@ -9,7 +9,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy } from 'lucide-react';
 import { toast } from 'sonner';
 
 const SET_TYPE_LABELS: Record<SetType, string> = { warmup: 'Calentam.', approach: 'Aproxim.', work: 'Trabajo' };
@@ -86,6 +86,21 @@ export default function SessionDetail() {
     navigate('/');
   }
 
+  async function duplicateSession() {
+    const today = new Date().toISOString().slice(0, 10);
+    const newSessionId = await db.sessions.add({ date: today, routine_id: session?.routine_id, notes: session?.notes });
+    const seList = await db.sessionExercises.where({ session_id: sessionId }).sortBy('order_index');
+    for (const se of seList) {
+      const newSeId = await db.sessionExercises.add({ session_id: newSessionId as number, exercise_id: se.exercise_id, order_index: se.order_index });
+      const sets = await db.sets.where({ session_exercise_id: se.id! }).toArray();
+      for (const s of sets) {
+        await db.sets.add({ session_exercise_id: newSeId as number, set_type: s.set_type, weight: s.weight, reps: s.reps, duration_seconds: s.duration_seconds, distance_meters: s.distance_meters });
+      }
+    }
+    toast.success('Sesión duplicada');
+    navigate(`/session/${newSessionId}`);
+  }
+
   async function addExercise() {
     if (!addExId) return;
     const maxOrder = sessionExercises?.length ? Math.max(...sessionExercises.map(se => se.order_index)) : -1;
@@ -138,10 +153,12 @@ export default function SessionDetail() {
       </button>
       <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-bold">Sesión {session.date}</h1>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
-          </AlertDialogTrigger>
+        <div className="flex gap-1">
+          <Button variant="ghost" size="icon" onClick={duplicateSession} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-destructive"><Trash2 className="h-4 w-4" /></Button>
+            </AlertDialogTrigger>
           <AlertDialogContent>
             <AlertDialogHeader>
               <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
@@ -153,6 +170,7 @@ export default function SessionDetail() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+        </div>
       </div>
 
       {/* Notes section */}
