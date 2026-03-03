@@ -1,13 +1,14 @@
 import { useState } from 'react';
 import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Exercise, type TrackingType, MUSCLE_GROUPS } from '@/db';
+import { db, type Exercise, type TrackingType } from '@/db';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
+import MuscleSelect from '@/components/MuscleSelect';
 
 const TRACKING_LABELS: Record<TrackingType, string> = {
   weight_reps: 'Peso + Reps',
@@ -103,36 +104,11 @@ export default function Exercises() {
             </div>
             <div>
               <Label>Músculo primario</Label>
-              <Select value={String(form.primary_muscle_id)} onValueChange={v => setForm(f => ({ ...f, primary_muscle_id: Number(v) }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  {Object.entries(MUSCLE_GROUPS).map(([group, names]) => (
-                    <SelectGroup key={group}>
-                      <SelectLabel>{group}</SelectLabel>
-                      {muscles?.filter(m => names.includes(m.name)).map(m => (
-                        <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MuscleSelect muscles={muscles} value={form.primary_muscle_id} onChange={v => setForm(f => ({ ...f, primary_muscle_id: v }))} />
             </div>
             <div>
               <Label>Músculo secundario (opcional)</Label>
-              <Select value={String(form.secondary_muscle_id)} onValueChange={v => setForm(f => ({ ...f, secondary_muscle_id: Number(v) }))}>
-                <SelectTrigger><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="0">Ninguno</SelectItem>
-                  {Object.entries(MUSCLE_GROUPS).map(([group, names]) => (
-                    <SelectGroup key={group}>
-                      <SelectLabel>{group}</SelectLabel>
-                      {muscles?.filter(m => names.includes(m.name)).map(m => (
-                        <SelectItem key={m.id} value={String(m.id)}>{m.name}</SelectItem>
-                      ))}
-                    </SelectGroup>
-                  ))}
-                </SelectContent>
-              </Select>
+              <MuscleSelect muscles={muscles} value={form.secondary_muscle_id ?? 0} onChange={v => setForm(f => ({ ...f, secondary_muscle_id: v }))} allowNone />
             </div>
             <Button className="w-full" onClick={save}>Guardar</Button>
           </div>
