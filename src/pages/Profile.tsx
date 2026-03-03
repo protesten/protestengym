@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut } from 'lucide-react';
+import { LogOut, User } from 'lucide-react';
 import { toast } from 'sonner';
 
 export default function Profile() {
@@ -26,53 +26,50 @@ export default function Profile() {
   }, [profile]);
 
   const saveMutation = useMutation({
-    mutationFn: () => updateProfile({
-      display_name: displayName,
-      preferences: { units },
-    }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['profile'] });
-      toast.success('Perfil actualizado');
-    },
+    mutationFn: () => updateProfile({ display_name: displayName, preferences: { units } }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['profile'] }); toast.success('Perfil actualizado'); },
   });
 
   const initials = (displayName || user?.email || '?').slice(0, 2).toUpperCase();
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
-      <h1 className="text-xl font-bold mb-6">Perfil</h1>
+      <h1 className="text-xl font-black mb-6 flex items-center gap-2">
+        <User className="h-5 w-5 text-primary" />
+        Perfil
+      </h1>
 
-      <div className="flex items-center gap-4 mb-6">
-        <Avatar className="h-16 w-16">
+      <div className="flex items-center gap-4 mb-6 p-4 rounded-xl bg-card border border-border">
+        <Avatar className="h-16 w-16 border-2 border-primary/30">
           <AvatarImage src={profile?.avatar_url ?? undefined} />
-          <AvatarFallback className="text-lg">{initials}</AvatarFallback>
+          <AvatarFallback className="text-lg font-bold bg-secondary text-foreground">{initials}</AvatarFallback>
         </Avatar>
         <div>
-          <p className="font-medium">{displayName || 'Sin nombre'}</p>
+          <p className="font-bold text-lg">{displayName || 'Sin nombre'}</p>
           <p className="text-sm text-muted-foreground">{user?.email}</p>
         </div>
       </div>
 
       <div className="space-y-4">
         <div>
-          <Label>Nombre</Label>
-          <Input value={displayName} onChange={e => setDisplayName(e.target.value)} />
+          <Label className="text-xs font-semibold text-muted-foreground">Nombre</Label>
+          <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="rounded-lg bg-card border-border" />
         </div>
         <div>
-          <Label>Unidades de peso</Label>
+          <Label className="text-xs font-semibold text-muted-foreground">Unidades de peso</Label>
           <Select value={units} onValueChange={setUnits}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger className="rounded-lg bg-card border-border"><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="kg">Kilogramos (kg)</SelectItem>
               <SelectItem value="lb">Libras (lb)</SelectItem>
             </SelectContent>
           </Select>
         </div>
-        <Button className="w-full" onClick={() => saveMutation.mutate()}>Guardar</Button>
+        <Button className="w-full rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => saveMutation.mutate()}>Guardar</Button>
       </div>
 
-      <div className="mt-8 pt-6 border-t">
-        <Button variant="outline" className="w-full text-destructive" onClick={signOut}>
+      <div className="mt-8 pt-6 border-t border-border">
+        <Button variant="outline" className="w-full rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={signOut}>
           <LogOut className="h-4 w-4 mr-2" />
           Cerrar sesión
         </Button>
