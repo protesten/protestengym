@@ -49,6 +49,14 @@ function RepRangeBadge({ plannedSet }: { plannedSet?: PlannedSet }) {
   );
 }
 
+function rpeColor(rpe: number | null | undefined): string {
+  if (rpe == null) return 'text-primary/70 bg-primary/10';
+  if (rpe <= 4) return 'text-green-400 bg-green-400/15';
+  if (rpe <= 6) return 'text-yellow-400 bg-yellow-400/15';
+  if (rpe <= 8) return 'text-orange-400 bg-orange-400/15';
+  return 'text-red-400 bg-red-400/15';
+}
+
 function SetRow({ set, trackingType, plannedSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = (set as any).rpe;
   
@@ -83,7 +91,7 @@ function SetRow({ set, trackingType, plannedSet, onUpdate, onDelete }: { set: Wo
           <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
         </Select>
         {plannedSet?.rpe != null && (
-          <span className="text-[10px] font-mono text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded shrink-0" title="RPE pautado">
+          <span className={cn("text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0", rpeColor(plannedSet.rpe))} title="RPE pautado">
             @{plannedSet.rpe}
           </span>
         )}
