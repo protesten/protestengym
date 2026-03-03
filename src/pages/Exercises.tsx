@@ -23,26 +23,29 @@ export default function Exercises() {
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Exercise | null>(null);
-  const [form, setForm] = useState({ name: '', tracking_type: 'weight_reps' as TrackingType, primary_muscle_id: 0, secondary_muscle_id: 0 });
+  const [form, setForm] = useState({ name: '', tracking_type: 'weight_reps' as TrackingType, primary_muscle_ids: [] as number[], secondary_muscle_ids: [] as number[] });
 
   const filtered = exercises?.filter(e => e.name.toLowerCase().includes(search.toLowerCase())) ?? [];
 
+  const muscleName = (id: number) => muscles?.find(m => m.id === id)?.name ?? '';
+  const muscleNames = (ids: number[]) => ids.map(id => muscleName(id)).filter(Boolean).join(', ');
+
   function openCreate() {
     setEditing(null);
-    setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_id: muscles?.[0]?.id ?? 0, secondary_muscle_id: 0 });
+    setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] });
     setDialogOpen(true);
   }
 
   function openEdit(ex: Exercise) {
     setEditing(ex);
-    setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_id: ex.primary_muscle_id, secondary_muscle_id: ex.secondary_muscle_id ?? 0 });
+    setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids, secondary_muscle_ids: ex.secondary_muscle_ids });
     setDialogOpen(true);
   }
 
   async function save() {
     if (!form.name.trim()) { toast.error('Nombre requerido'); return; }
-    if (!form.primary_muscle_id) { toast.error('Músculo primario requerido'); return; }
-    const data = { ...form, secondary_muscle_id: form.secondary_muscle_id || undefined };
+    if (form.primary_muscle_ids.length === 0) { toast.error('Al menos un músculo primario requerido'); return; }
+    const data = { ...form };
     if (editing?.id) {
       await db.exercises.update(editing.id, data);
       toast.success('Ejercicio actualizado');
@@ -57,8 +60,6 @@ export default function Exercises() {
     await db.exercises.delete(id);
     toast.success('Ejercicio eliminado');
   }
-
-  const muscleName = (id?: number) => muscles?.find(m => m.id === id)?.name ?? '';
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
@@ -75,11 +76,14 @@ export default function Exercises() {
       <div className="space-y-2">
         {filtered.map(ex => (
           <div key={ex.id} className="flex items-center justify-between p-3 rounded-lg bg-card border">
-            <div>
+            <div className="min-w-0 flex-1">
               <p className="font-medium text-sm">{ex.name}</p>
-              <p className="text-xs text-muted-foreground">{TRACKING_LABELS[ex.tracking_type]} · {muscleName(ex.primary_muscle_id)}{ex.secondary_muscle_id ? ` / ${muscleName(ex.secondary_muscle_id)}` : ''}</p>
+              <p className="text-xs text-muted-foreground truncate">
+                {TRACKING_LABELS[ex.tracking_type]} · {muscleNames(ex.primary_muscle_ids)}
+                {ex.secondary_muscle_ids.length > 0 ? ` / ${muscleNames(ex.secondary_muscle_ids)}` : ''}
+              </p>
             </div>
-            <div className="flex gap-1">
+            <div className="flex gap-1 shrink-0">
               <Button variant="ghost" size="icon" onClick={() => openEdit(ex)}><Pencil className="h-4 w-4" /></Button>
               <Button variant="ghost" size="icon" onClick={() => remove(ex.id!)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
@@ -103,12 +107,12 @@ export default function Exercises() {
               </Select>
             </div>
             <div>
-              <Label>Músculo primario</Label>
-              <MuscleSelect muscles={muscles} value={form.primary_muscle_id} onChange={v => setForm(f => ({ ...f, primary_muscle_id: v }))} />
+              <Label>Músculos primarios</Label>
+              <MuscleSelect muscles={muscles} value={form.primary_muscle_ids} onChange={v => setForm(f => ({ ...f, primary_muscle_ids: v }))} />
             </div>
             <div>
-              <Label>Músculo secundario (opcional)</Label>
-              <MuscleSelect muscles={muscles} value={form.secondary_muscle_id ?? 0} onChange={v => setForm(f => ({ ...f, secondary_muscle_id: v }))} allowNone />
+              <Label>Músculos secundarios (opcional)</Label>
+              <MuscleSelect muscles={muscles} value={form.secondary_muscle_ids} onChange={v => setForm(f => ({ ...f, secondary_muscle_ids: v }))} />
             </div>
             <Button className="w-full" onClick={save}>Guardar</Button>
           </div>

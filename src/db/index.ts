@@ -12,8 +12,8 @@ export interface Exercise {
   id?: number;
   name: string;
   tracking_type: TrackingType;
-  primary_muscle_id: number;
-  secondary_muscle_id?: number;
+  primary_muscle_ids: number[];
+  secondary_muscle_ids: number[];
 }
 
 export interface Routine {
@@ -71,6 +71,19 @@ class WorkoutDB extends Dexie {
       sessions: '++id, date, routine_id',
       sessionExercises: '++id, session_id, exercise_id',
       sets: '++id, session_exercise_id',
+    });
+    this.version(2).stores({
+      exercises: '++id, name, tracking_type',
+    }).upgrade(tx => {
+      return tx.table('exercises').toCollection().modify(ex => {
+        // Migrate single IDs to arrays
+        const pid = (ex as any).primary_muscle_id;
+        const sid = (ex as any).secondary_muscle_id;
+        ex.primary_muscle_ids = pid ? [pid] : [];
+        ex.secondary_muscle_ids = sid ? [sid] : [];
+        delete (ex as any).primary_muscle_id;
+        delete (ex as any).secondary_muscle_id;
+      });
     });
   }
 }
@@ -133,24 +146,30 @@ db.on('ready', async () => {
   const oldMuscles = allMuscles.filter(m => m.name in OLD_TO_NEW);
 
   if (oldMuscles.length > 0) {
+    const oldIdToNewId = new Map<number, number>();
     for (const old of oldMuscles) {
-      const newName = OLD_TO_NEW[old.name];
-      const newId = nameToId.get(newName);
-      if (!newId) continue;
+      const newId = nameToId.get(OLD_TO_NEW[old.name]);
+      if (newId) oldIdToNewId.set(old.id!, newId);
+    }
 
-      // Update exercises referencing this old muscle
-      const primaryExercises = await db.exercises.where('primary_muscle_id').equals(old.id!).toArray();
-      for (const ex of primaryExercises) {
-        await db.exercises.update(ex.id!, { primary_muscle_id: newId });
+    // Update exercises referencing old muscle IDs in arrays
+    const allExercises = await db.exercises.toArray();
+    for (const ex of allExercises) {
+      let changed = false;
+      const newPrimary = ex.primary_muscle_ids.map(id => {
+        if (oldIdToNewId.has(id)) { changed = true; return oldIdToNewId.get(id)!; }
+        return id;
+      });
+      const newSecondary = ex.secondary_muscle_ids.map(id => {
+        if (oldIdToNewId.has(id)) { changed = true; return oldIdToNewId.get(id)!; }
+        return id;
+      });
+      if (changed) {
+        await db.exercises.update(ex.id!, { primary_muscle_ids: [...new Set(newPrimary)], secondary_muscle_ids: [...new Set(newSecondary)] });
       }
-      const allExercises = await db.exercises.toArray();
-      for (const ex of allExercises) {
-        if (ex.secondary_muscle_id === old.id!) {
-          await db.exercises.update(ex.id!, { secondary_muscle_id: newId });
-        }
-      }
+    }
 
-      // Delete old muscle
+    for (const old of oldMuscles) {
       await db.muscles.delete(old.id!);
     }
   }
