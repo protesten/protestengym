@@ -1,92 +1,60 @@
 
 
-## Plan: Migrar a Supabase con autenticación Google y sincronización
+## Plan: Ejercicios predefinidos + gestión de administración
 
-Este es un cambio grande: migrar de Dexie.js (local) a Supabase (cloud) con autenticación Google y perfiles de usuario.
+### Concepto
 
----
+Crear una tabla `predefined_exercises` separada de `exercises`. Los predefinidos son visibles para todos los usuarios (SELECT público), pero solo tú (admin) puedes crearlos/editarlos/eliminarlos. Los usuarios siguen creando sus ejercicios personales en la tabla `exercises` existente. Al seleccionar ejercicios (en rutinas, sesiones), se muestran ambos: predefinidos + personales.
 
-### Fase 1: Conectar Supabase y crear esquema
+### Fase 1: Base de datos
 
-**Prerequisito**: Habilitar Lovable Cloud (Supabase) en el proyecto.
+**Nueva tabla `predefined_exercises`** con la misma estructura que `exercises` pero sin `user_id`:
+- `id` (uuid), `name` (text, unique), `tracking_type` (tracking_type enum), `primary_muscle_ids` (int[]), `secondary_muscle_ids` (int[]), `created_at`
 
-**Migración SQL** — Crear todas las tablas en Supabase adaptando el esquema actual:
+**RLS**:
+- SELECT: público para usuarios autenticados (`true`)
+- INSERT/UPDATE/DELETE: restringido a admin vía función `has_role`
 
-- `muscles` — tabla compartida de solo lectura, pre-poblada con los músculos actuales
-- `profiles` — id (uuid, FK auth.users), display_name, avatar_url, preferences (jsonb: unidades, tema)
-- `exercises` — id, user_id (FK auth.users), name, tracking_type, primary_muscle_ids (int[]), secondary_muscle_ids (int[])
-- `routines` — id, user_id, name
-- `routine_exercises` — id, routine_id, exercise_id, order_index
-- `sessions` — id, user_id, date, routine_id, notes
-- `session_exercises` — id, session_id, exercise_id, order_index
-- `sets` — id, session_exercise_id, set_type, weight, reps, duration_seconds, distance_meters
+**Sistema de roles** (tabla `user_roles` con enum `app_role`):
+- Crear enum `app_role` ('admin', 'user')
+- Crear tabla `user_roles` (user_id, role) con RLS
+- Función `has_role(uuid, app_role)` security definer
+- Asignar rol admin a tu usuario
 
-**RLS policies**: Cada tabla con user_id usa `auth.uid() = user_id`. Tablas hijas (routine_exercises, session_exercises, sets) verifican ownership del padre via EXISTS. `muscles` es SELECT para todos.
+**Insertar los ~45 ejercicios predefinidos únicos** (deduplicados de la lista proporcionada) con sus muscle_ids mapeados a la tabla `muscles`.
 
-**Trigger**: Auto-crear perfil al registrarse (on auth.users insert).
+### Fase 2: API
 
----
+Añadir a `src/lib/api.ts`:
+- `getPredefinedExercises()` — SELECT de `predefined_exercises`
+- `createPredefinedExercise()`, `updatePredefinedExercise()`, `deletePredefinedExercise()` — CRUD admin
+- `getAllExercises()` — combina predefinidos + personales para selección en rutinas/sesiones
+- `isAdmin()` — consulta `user_roles`
 
-### Fase 2: Autenticación con Google
+### Fase 3: UI
 
-Archivos nuevos:
-- `src/integrations/supabase/client.ts` — cliente Supabase
-- `src/contexts/AuthContext.tsx` — contexto de auth con `onAuthStateChange`, login/logout Google
-- `src/pages/Auth.tsx` — página de login con botón Google
-- `src/components/ProtectedRoute.tsx` — wrapper que redirige a /auth si no autenticado
+**Página Ejercicios (`Exercises.tsx`)**:
+- Añadir tabs o secciones: "Predefinidos" y "Mis ejercicios"
+- Los predefinidos muestran badge "Predefinido" y solo son editables/eliminables si el usuario es admin
+- Los personales funcionan como ahora
+- Admin ve botones de crear/editar/eliminar en predefinidos
 
-Modificar `src/App.tsx`:
-- Envolver con AuthProvider
-- Rutas protegidas excepto /auth
+**Selección de ejercicios** (en RoutineDetail, SessionDetail):
+- Mostrar ambas listas (predefinidos + personales) al añadir ejercicio, agrupados
 
----
+### Fase 4: Mapeo de músculos para los ejercicios
 
-### Fase 3: Capa de datos Supabase
+Mapear cada ejercicio de la lista a los IDs de la tabla `muscles` existente. Algunos músculos mencionados (como "psoas ilíaco", "lumbares") no existen en la tabla actual, por lo que se añadirán a la tabla `muscles`.
 
-Reemplazar `src/db/index.ts` con `src/lib/api.ts` — funciones CRUD usando el cliente Supabase en vez de Dexie:
-- `getExercises()`, `createExercise()`, `updateExercise()`, `deleteExercise()`
-- `getRoutines()`, `getRoutineExercises()`, etc.
-- `getSessions()`, `getSessionExercises()`, `getSets()`, etc.
+**Músculos nuevos a insertar**: Psoas ilíaco, Erectores lumbares (o usar Erectores espinales id:12 como equivalente).
 
-Usar `@tanstack/react-query` (ya instalado) para cache y reactividad en vez de `useLiveQuery`.
+### Archivos afectados
 
----
-
-### Fase 4: Adaptar todas las páginas
-
-Refactorizar cada página para usar las nuevas funciones API + react-query en vez de Dexie:
-
-| Página | Cambio principal |
+| Acción | Archivo |
 |---|---|
-| `Index.tsx` | Mostrar nombre del usuario |
-| `Exercises.tsx` | useQuery/useMutation en vez de useLiveQuery/db.exercises |
-| `Routines.tsx` | Igual |
-| `RoutineDetail.tsx` | Igual |
-| `NewSession.tsx` | Igual |
-| `SessionDetail.tsx` | Igual |
-| `Analysis.tsx` | Adaptar calculations.ts para usar API |
-
-`src/db/calculations.ts` se refactorizará para recibir datos como parámetros en vez de acceder a Dexie directamente.
-
----
-
-### Fase 5: Perfil y preferencias
-
-- Nueva página `src/pages/Profile.tsx` — nombre, avatar, unidades (kg/lb), tema
-- Botón de perfil en la BottomNav o header
-- Almacenar preferencias en `profiles.preferences` como JSONB
-
----
-
-### Resumen de archivos
-
-| Acción | Archivos |
-|---|---|
-| Crear | `src/integrations/supabase/client.ts`, `src/contexts/AuthContext.tsx`, `src/pages/Auth.tsx`, `src/components/ProtectedRoute.tsx`, `src/lib/api.ts`, `src/pages/Profile.tsx` |
-| Refactorizar | `src/App.tsx`, `src/pages/Exercises.tsx`, `src/pages/Routines.tsx`, `src/pages/RoutineDetail.tsx`, `src/pages/NewSession.tsx`, `src/pages/SessionDetail.tsx`, `src/pages/Analysis.tsx`, `src/db/calculations.ts`, `src/components/BottomNav.tsx` |
-| Eliminar | `src/db/index.ts` (reemplazado por api.ts) |
-
-### Nota importante
-
-Se necesita habilitar Lovable Cloud antes de empezar. Tambien se requiere configurar Google OAuth en el dashboard de Supabase (añadir Google como proveedor de auth con las credenciales de Google Cloud Console).
+| Migración SQL | Nueva tabla, roles, seed de ejercicios |
+| Modificar | `src/lib/api.ts` — nuevas funciones |
+| Modificar | `src/pages/Exercises.tsx` — tabs predefinidos/personales, lógica admin |
+| Modificar | `src/pages/RoutineDetail.tsx` — mostrar ambos tipos al seleccionar |
+| Modificar | `src/pages/SessionDetail.tsx` — igual |
 
