@@ -120,8 +120,8 @@ export async function getMuscleComparisons(period: '7d' | 'month'): Promise<Musc
 
     for (const ex of exercises) {
       if (ex.tracking_type === 'distance_time') continue;
-      const isPrimary = ex.primary_muscle_id === muscle.id;
-      const isSecondary = ex.secondary_muscle_id === muscle.id;
+      const isPrimary = ex.primary_muscle_ids.includes(muscle.id!);
+      const isSecondary = ex.secondary_muscle_ids.includes(muscle.id!);
       if (!isPrimary && !isSecondary) continue;
 
       const factor = isPrimary ? 1 : 0.5;
