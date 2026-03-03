@@ -1,0 +1,137 @@
+import { useState, useEffect } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
+import { useLiveQuery } from 'dexie-react-hooks';
+import { db, type WorkoutSet, type SetType, type TrackingType } from '@/db';
+import { getSessionSummary, type SessionSummary } from '@/db/calculations';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
+import { Plus, Trash2, ArrowLeft } from 'lucide-react';
+import { toast } from 'sonner';
+
+const SET_TYPE_LABELS: Record<SetType, string> = { warmup: 'Calentam.', approach: 'Aproxim.', work: 'Trabajo' };
+
+function SetRow({ set, trackingType, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
+  return (
+    <div className="flex items-center gap-2 py-1">
+      <Select value={set.set_type} onValueChange={v => onUpdate({ set_type: v as SetType })}>
+        <SelectTrigger className="w-24 h-8 text-xs"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          {Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      {(trackingType === 'weight_reps') && (
+        <>
+          <Input type="number" placeholder="kg" className="w-16 h-8 text-xs" value={set.weight ?? ''} onChange={e => onUpdate({ weight: e.target.value ? Number(e.target.value) : undefined })} />
+          <Input type="number" placeholder="reps" className="w-16 h-8 text-xs" value={set.reps ?? ''} onChange={e => onUpdate({ reps: e.target.value ? Number(e.target.value) : undefined })} />
+        </>
+      )}
+      {trackingType === 'reps_only' && (
+        <Input type="number" placeholder="reps" className="w-20 h-8 text-xs" value={set.reps ?? ''} onChange={e => onUpdate({ reps: e.target.value ? Number(e.target.value) : undefined })} />
+      )}
+      {trackingType === 'time_only' && (
+        <Input type="number" placeholder="seg" className="w-20 h-8 text-xs" value={set.duration_seconds ?? ''} onChange={e => onUpdate({ duration_seconds: e.target.value ? Number(e.target.value) : undefined })} />
+      )}
+      {trackingType === 'distance_time' && (
+        <>
+          <Input type="number" placeholder="seg" className="w-16 h-8 text-xs" value={set.duration_seconds ?? ''} onChange={e => onUpdate({ duration_seconds: e.target.value ? Number(e.target.value) : undefined })} />
+          <Input type="number" placeholder="m" className="w-16 h-8 text-xs" value={set.distance_meters ?? ''} onChange={e => onUpdate({ distance_meters: e.target.value ? Number(e.target.value) : undefined })} />
+        </>
+      )}
+      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+    </div>
+  );
+}
+
+export default function SessionDetail() {
+  const { id } = useParams<{ id: string }>();
+  const navigate = useNavigate();
+  const sessionId = Number(id);
+  const session = useLiveQuery(() => db.sessions.get(sessionId), [sessionId]);
+  const sessionExercises = useLiveQuery(() => db.sessionExercises.where({ session_id: sessionId }).sortBy('order_index'), [sessionId]);
+  const exercises = useLiveQuery(() => db.exercises.toArray());
+  const allSets = useLiveQuery(() => db.sets.toArray(), []);
+  const [summary, setSummary] = useState<SessionSummary | null>(null);
+  const [addExId, setAddExId] = useState('');
+
+  useEffect(() => {
+    getSessionSummary(sessionId).then(setSummary);
+  }, [sessionId, allSets]);
+
+  async function addExercise() {
+    if (!addExId) return;
+    const maxOrder = sessionExercises?.length ? Math.max(...sessionExercises.map(se => se.order_index)) : -1;
+    await db.sessionExercises.add({ session_id: sessionId, exercise_id: Number(addExId), order_index: maxOrder + 1 });
+    setAddExId('');
+  }
+
+  async function addSet(seId: number) {
+    await db.sets.add({ session_exercise_id: seId, set_type: 'work' });
+  }
+
+  async function updateSet(setId: number, data: Partial<WorkoutSet>) {
+    await db.sets.update(setId, data);
+  }
+
+  async function deleteSet(setId: number) {
+    await db.sets.delete(setId);
+  }
+
+  const getExercise = (exId: number) => exercises?.find(e => e.id === exId);
+  const getSets = (seId: number) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
+
+  if (!session) return <div className="p-4">Cargando...</div>;
+
+  return (
+    <div className="p-4 pb-24 max-w-lg mx-auto">
+      <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm">
+        <ArrowLeft className="h-4 w-4" />Inicio
+      </button>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-bold">Sesión {session.date}</h1>
+      </div>
+
+      <Accordion type="multiple" className="space-y-2">
+        {sessionExercises?.map((se) => {
+          const ex = getExercise(se.exercise_id);
+          const sets = getSets(se.id!);
+          return (
+            <AccordionItem key={se.id} value={String(se.id)} className="border rounded-lg px-3">
+              <AccordionTrigger className="py-3 text-sm font-medium">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
+              <AccordionContent>
+                <div className="space-y-1">
+                  {sets.map(s => (
+                    <SetRow key={s.id} set={s} trackingType={ex?.tracking_type ?? 'weight_reps'} onUpdate={data => updateSet(s.id!, data)} onDelete={() => deleteSet(s.id!)} />
+                  ))}
+                </div>
+                <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => addSet(se.id!)}>
+                  <Plus className="h-3 w-3 mr-1" />Serie
+                </Button>
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+
+      <div className="flex gap-2 mt-4">
+        <Select value={addExId} onValueChange={setAddExId}>
+          <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir ejercicio..." /></SelectTrigger>
+          <SelectContent>
+            {exercises?.map(e => <SelectItem key={e.id} value={String(e.id)}>{e.name}</SelectItem>)}
+          </SelectContent>
+        </Select>
+        <Button size="icon" onClick={addExercise} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
+      </div>
+
+      {summary && (
+        <div className="mt-6 p-4 rounded-lg bg-card border space-y-2">
+          <h3 className="font-semibold text-sm mb-2">Resumen</h3>
+          {summary.strengthTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Fuerza total</span><span className="font-mono">{summary.strengthTotal.toLocaleString()}</span></div>}
+          {summary.isometricTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Isométricos</span><span className="font-mono">{Math.floor(summary.isometricTotal / 60)}m {summary.isometricTotal % 60}s</span></div>}
+          {summary.cardioTime > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Cardio</span><span className="font-mono">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
+        </div>
+      )}
+    </div>
+  );
+}
