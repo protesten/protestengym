@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useLiveQuery } from 'dexie-react-hooks';
+import { format, parseISO } from 'date-fns';
 import { db, type WorkoutSet, type SetType, type TrackingType } from '@/db';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
+import { Calendar } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon } from 'lucide-react';
+import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 const SET_TYPE_LABELS: Record<SetType, string> = { warmup: 'Calentam.', approach: 'Aproxim.', work: 'Trabajo' };
@@ -152,7 +156,29 @@ export default function SessionDetail() {
         <ArrowLeft className="h-4 w-4" />Inicio
       </button>
       <div className="flex items-center justify-between mb-2">
-        <h1 className="text-xl font-bold">Sesión {session.date}</h1>
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button variant="ghost" className="text-xl font-bold px-2 h-auto py-1 gap-2">
+              Sesión {session.date}
+              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent className="w-auto p-0" align="start">
+            <Calendar
+              mode="single"
+              selected={parseISO(session.date)}
+              onSelect={async (date) => {
+                if (date) {
+                  const newDate = format(date, 'yyyy-MM-dd');
+                  await db.sessions.update(sessionId, { date: newDate });
+                  toast.success('Fecha actualizada');
+                }
+              }}
+              initialFocus
+              className={cn("p-3 pointer-events-auto")}
+            />
+          </PopoverContent>
+        </Popover>
         <div className="flex gap-1">
           <Button variant="ghost" size="icon" onClick={duplicateSession} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
           <AlertDialog>
