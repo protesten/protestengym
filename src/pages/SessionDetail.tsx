@@ -17,6 +17,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon } from 'lucide-react';
@@ -276,23 +277,7 @@ export default function SessionDetail() {
       </Accordion>
 
       <div className="flex gap-2 mt-4">
-        <Select value={addExId} onValueChange={setAddExId}>
-          <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir ejercicio..." /></SelectTrigger>
-          <SelectContent>
-            {exercises?.filter(e => e.source === 'predefined').length ? (
-              <>
-                <SelectItem value="__header_pred" disabled className="text-xs font-semibold text-muted-foreground">— Predefinidos —</SelectItem>
-                {exercises.filter(e => e.source === 'predefined').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-              </>
-            ) : null}
-            {exercises?.filter(e => e.source === 'personal').length ? (
-              <>
-                <SelectItem value="__header_pers" disabled className="text-xs font-semibold text-muted-foreground">— Mis ejercicios —</SelectItem>
-                {exercises.filter(e => e.source === 'personal').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-              </>
-            ) : null}
-          </SelectContent>
-        </Select>
+        <ExerciseSearchSelect exercises={exercises} value={addExId} onChange={setAddExId} />
         <Button size="icon" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
       </div>
 
