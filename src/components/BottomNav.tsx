@@ -1,11 +1,12 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, ListChecks, BarChart3 } from 'lucide-react';
+import { Home, Dumbbell, ListChecks, BarChart3, User } from 'lucide-react';
 
 const navItems = [
   { to: '/', icon: Home, label: 'Inicio' },
   { to: '/exercises', icon: Dumbbell, label: 'Ejercicios' },
   { to: '/routines', icon: ListChecks, label: 'Rutinas' },
   { to: '/analysis', icon: BarChart3, label: 'Análisis' },
+  { to: '/profile', icon: User, label: 'Perfil' },
 ];
 
 export function BottomNav() {

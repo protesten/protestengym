@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Exercise, type TrackingType } from '@/db';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getMuscles, getExercises, createExercise, updateExercise, deleteExercise, type Exercise } from '@/lib/api';
+import { TRACKING_LABELS, MUSCLE_GROUPS, type TrackingType } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,16 +11,10 @@ import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import MuscleSelect from '@/components/MuscleSelect';
 
-const TRACKING_LABELS: Record<TrackingType, string> = {
-  weight_reps: 'Peso + Reps',
-  reps_only: 'Solo Reps',
-  time_only: 'Solo Tiempo',
-  distance_time: 'Distancia + Tiempo',
-};
-
 export default function Exercises() {
-  const muscles = useLiveQuery(() => db.muscles.toArray());
-  const exercises = useLiveQuery(() => db.exercises.toArray());
+  const queryClient = useQueryClient();
+  const { data: muscles } = useQuery({ queryKey: ['muscles'], queryFn: getMuscles });
+  const { data: exercises } = useQuery({ queryKey: ['exercises'], queryFn: getExercises });
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Exercise | null>(null);
@@ -30,6 +25,32 @@ export default function Exercises() {
   const muscleName = (id: number) => muscles?.find(m => m.id === id)?.name ?? '';
   const muscleNames = (ids: number[]) => ids.map(id => muscleName(id)).filter(Boolean).join(', ');
 
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!form.name.trim()) throw new Error('Nombre requerido');
+      if (form.primary_muscle_ids.length === 0) throw new Error('Al menos un músculo primario requerido');
+      if (editing) {
+        await updateExercise(editing.id, { name: form.name, tracking_type: form.tracking_type, primary_muscle_ids: form.primary_muscle_ids, secondary_muscle_ids: form.secondary_muscle_ids });
+      } else {
+        await createExercise({ name: form.name, tracking_type: form.tracking_type, primary_muscle_ids: form.primary_muscle_ids, secondary_muscle_ids: form.secondary_muscle_ids });
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exercises'] });
+      toast.success(editing ? 'Ejercicio actualizado' : 'Ejercicio creado');
+      setDialogOpen(false);
+    },
+    onError: (e) => toast.error(e.message),
+  });
+
+  const removeMutation = useMutation({
+    mutationFn: deleteExercise,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['exercises'] });
+      toast.success('Ejercicio eliminado');
+    },
+  });
+
   function openCreate() {
     setEditing(null);
     setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] });
@@ -38,27 +59,8 @@ export default function Exercises() {
 
   function openEdit(ex: Exercise) {
     setEditing(ex);
-    setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids, secondary_muscle_ids: ex.secondary_muscle_ids });
+    setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [] });
     setDialogOpen(true);
-  }
-
-  async function save() {
-    if (!form.name.trim()) { toast.error('Nombre requerido'); return; }
-    if (form.primary_muscle_ids.length === 0) { toast.error('Al menos un músculo primario requerido'); return; }
-    const data = { ...form };
-    if (editing?.id) {
-      await db.exercises.update(editing.id, data);
-      toast.success('Ejercicio actualizado');
-    } else {
-      await db.exercises.add(data);
-      toast.success('Ejercicio creado');
-    }
-    setDialogOpen(false);
-  }
-
-  async function remove(id: number) {
-    await db.exercises.delete(id);
-    toast.success('Ejercicio eliminado');
   }
 
   return (
@@ -79,13 +81,13 @@ export default function Exercises() {
             <div className="min-w-0 flex-1">
               <p className="font-medium text-sm">{ex.name}</p>
               <p className="text-xs text-muted-foreground truncate">
-                {TRACKING_LABELS[ex.tracking_type]} · {muscleNames(ex.primary_muscle_ids)}
-                {ex.secondary_muscle_ids.length > 0 ? ` / ${muscleNames(ex.secondary_muscle_ids)}` : ''}
+                {TRACKING_LABELS[ex.tracking_type]} · {muscleNames(ex.primary_muscle_ids ?? [])}
+                {(ex.secondary_muscle_ids ?? []).length > 0 ? ` / ${muscleNames(ex.secondary_muscle_ids ?? [])}` : ''}
               </p>
             </div>
             <div className="flex gap-1 shrink-0">
               <Button variant="ghost" size="icon" onClick={() => openEdit(ex)}><Pencil className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="icon" onClick={() => remove(ex.id!)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+              <Button variant="ghost" size="icon" onClick={() => removeMutation.mutate(ex.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
           </div>
         ))}
@@ -114,7 +116,7 @@ export default function Exercises() {
               <Label>Músculos secundarios (opcional)</Label>
               <MuscleSelect muscles={muscles} value={form.secondary_muscle_ids} onChange={v => setForm(f => ({ ...f, secondary_muscle_ids: v }))} />
             </div>
-            <Button className="w-full" onClick={save}>Guardar</Button>
+            <Button className="w-full" onClick={() => saveMutation.mutate()}>Guardar</Button>
           </div>
         </DialogContent>
       </Dialog>

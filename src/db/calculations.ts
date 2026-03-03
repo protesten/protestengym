@@ -1,8 +1,12 @@
-import { db, type Exercise, type WorkoutSet, type TrackingType } from './index';
+import { supabase } from '@/integrations/supabase/client';
+import type { Tables } from '@/integrations/supabase/types';
 import { startOfMonth, subDays, subMonths, endOfMonth, format, startOfWeek, endOfWeek, subWeeks } from 'date-fns';
 import { es } from 'date-fns/locale';
 
-// Work metric for a set based on tracking type
+type TrackingType = 'weight_reps' | 'reps_only' | 'time_only' | 'distance_time';
+type WorkoutSet = Tables<'sets'>;
+type Exercise = Tables<'exercises'>;
+
 export function setWorkMetric(set: WorkoutSet, trackingType: TrackingType): number {
   if (set.set_type !== 'work') return 0;
   switch (trackingType) {
@@ -17,10 +21,6 @@ export function setsWorkMetric(sets: WorkoutSet[], trackingType: TrackingType): 
   return sets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
 }
 
-export function setsDistance(sets: WorkoutSet[]): number {
-  return sets.filter(s => s.set_type === 'work').reduce((sum, s) => sum + (s.distance_meters ?? 0), 0);
-}
-
 export interface Comparison {
   current: number;
   previous: number;
@@ -33,44 +33,20 @@ export function makeComparison(current: number, previous: number): Comparison {
   return { current, previous, diff, arrow: diff > 0 ? '↑' : diff < 0 ? '↓' : '=' };
 }
 
-// Get work metric for an exercise in a specific session
-async function exerciseMetricInSession(sessionId: number, exerciseId: number, trackingType: TrackingType): Promise<number> {
-  const ses = await db.sessionExercises.where({ session_id: sessionId, exercise_id: exerciseId }).toArray();
-  if (!ses.length) return 0;
-  const allSets = await Promise.all(ses.map(se => db.sets.where({ session_exercise_id: se.id! }).toArray()));
-  return allSets.flat().reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
+async function exerciseMetricInRange(exerciseId: string, from: string, to: string, trackingType: TrackingType): Promise<number> {
+  const { data: sessions } = await supabase.from('sessions').select('id').gte('date', from).lte('date', to);
+  if (!sessions?.length) return 0;
+  const sessionIds = sessions.map(s => s.id);
+  const { data: ses } = await supabase.from('session_exercises').select('id').in('session_id', sessionIds).eq('exercise_id', exerciseId);
+  if (!ses?.length) return 0;
+  const seIds = ses.map(se => se.id);
+  const { data: sets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
+  if (!sets) return 0;
+  return sets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
 }
 
-// Sum work metric for exercise in date range
-async function exerciseMetricInRange(exerciseId: number, from: string, to: string, trackingType: TrackingType): Promise<number> {
-  const sessions = await db.sessions.where('date').between(from, to, true, true).toArray();
-  let total = 0;
-  for (const session of sessions) {
-    total += await exerciseMetricInSession(session.id!, exerciseId, trackingType);
-  }
-  return total;
-}
-
-export async function getExerciseComparisons(exerciseId: number, trackingType: TrackingType, currentSessionId?: number) {
+export async function getExerciseComparisons(exerciseId: string, trackingType: TrackingType) {
   const today = format(new Date(), 'yyyy-MM-dd');
-
-  // Last session comparison
-  let lastSession: Comparison | null = null;
-  if (currentSessionId) {
-    const allSessions = await db.sessions.orderBy('date').reverse().toArray();
-    const sessionsWithExercise: number[] = [];
-    for (const s of allSessions) {
-      const has = await db.sessionExercises.where({ session_id: s.id!, exercise_id: exerciseId }).count();
-      if (has > 0) sessionsWithExercise.push(s.id!);
-    }
-    const currentIdx = sessionsWithExercise.indexOf(currentSessionId);
-    if (currentIdx >= 0 && sessionsWithExercise[currentIdx + 1]) {
-      const prevId = sessionsWithExercise[currentIdx + 1];
-      const curr = await exerciseMetricInSession(currentSessionId, exerciseId, trackingType);
-      const prev = await exerciseMetricInSession(prevId, exerciseId, trackingType);
-      lastSession = makeComparison(curr, prev);
-    }
-  }
 
   // 7 days
   const d7from = format(subDays(new Date(), 6), 'yyyy-MM-dd');
@@ -88,7 +64,7 @@ export async function getExerciseComparisons(exerciseId: number, trackingType: T
   const prevMonth = await exerciseMetricInRange(exerciseId, prevMonthStart, prevMonthEnd, trackingType);
   const month = makeComparison(currMonth, prevMonth);
 
-  return { lastSession, week, month };
+  return { lastSession: null as Comparison | null, week, month };
 }
 
 export interface MuscleVolume {
@@ -112,8 +88,10 @@ export async function getMuscleComparisons(period: '7d' | 'month'): Promise<Musc
     prevTo = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
   }
 
-  const muscles = await db.muscles.toArray();
-  const exercises = await db.exercises.toArray();
+  const { data: muscles } = await supabase.from('muscles').select('*').order('id');
+  const { data: exercises } = await supabase.from('exercises').select('*');
+  if (!muscles || !exercises) return [];
+
   const result: MuscleVolume[] = [];
 
   for (const muscle of muscles) {
@@ -121,13 +99,13 @@ export async function getMuscleComparisons(period: '7d' | 'month'): Promise<Musc
 
     for (const ex of exercises) {
       if (ex.tracking_type === 'distance_time') continue;
-      const isPrimary = ex.primary_muscle_ids.includes(muscle.id!);
-      const isSecondary = ex.secondary_muscle_ids.includes(muscle.id!);
+      const isPrimary = (ex.primary_muscle_ids ?? []).includes(muscle.id);
+      const isSecondary = (ex.secondary_muscle_ids ?? []).includes(muscle.id);
       if (!isPrimary && !isSecondary) continue;
 
       const factor = isPrimary ? 1 : 0.5;
-      const currVal = await exerciseMetricInRange(ex.id!, currFrom, today, ex.tracking_type);
-      const prevVal = await exerciseMetricInRange(ex.id!, prevFrom, prevTo, ex.tracking_type);
+      const currVal = await exerciseMetricInRange(ex.id, currFrom, today, ex.tracking_type);
+      const prevVal = await exerciseMetricInRange(ex.id, prevFrom, prevTo, ex.tracking_type);
 
       if (ex.tracking_type === 'time_only') {
         currIso += currVal * factor;
@@ -138,19 +116,21 @@ export async function getMuscleComparisons(period: '7d' | 'month'): Promise<Musc
       }
     }
 
-    result.push({
-      muscleId: muscle.id!,
-      muscleName: muscle.name,
-      strength: makeComparison(currStrength, prevStrength),
-      isometric: makeComparison(currIso, prevIso),
-    });
+    if (currStrength > 0 || prevStrength > 0 || currIso > 0 || prevIso > 0) {
+      result.push({
+        muscleId: muscle.id,
+        muscleName: muscle.name,
+        strength: makeComparison(currStrength, prevStrength),
+        isometric: makeComparison(currIso, prevIso),
+      });
+    }
   }
 
   return result;
 }
 
 export interface SessionSummary {
-  sessionId: number;
+  sessionId: string;
   date: string;
   strengthTotal: number;
   isometricTotal: number;
@@ -158,31 +138,34 @@ export interface SessionSummary {
   cardioDistance: number;
 }
 
-export async function getSessionSummary(sessionId: number): Promise<SessionSummary> {
-  const session = await db.sessions.get(sessionId);
-  const sesExercises = await db.sessionExercises.where({ session_id: sessionId }).toArray();
+export async function getSessionSummary(sessionId: string): Promise<SessionSummary> {
+  const { data: session } = await supabase.from('sessions').select('*').eq('id', sessionId).single();
+  const { data: sesExercises } = await supabase.from('session_exercises').select('*').eq('session_id', sessionId);
+  
   let strengthTotal = 0, isometricTotal = 0, cardioTime = 0, cardioDistance = 0;
 
-  for (const se of sesExercises) {
-    const exercise = await db.exercises.get(se.exercise_id);
-    if (!exercise) continue;
-    const sets = await db.sets.where({ session_exercise_id: se.id! }).toArray();
-    const workSets = sets.filter(s => s.set_type === 'work');
+  if (sesExercises) {
+    for (const se of sesExercises) {
+      const { data: exercise } = await supabase.from('exercises').select('*').eq('id', se.exercise_id).single();
+      if (!exercise) continue;
+      const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
+      const workSets = (sets ?? []).filter(s => s.set_type === 'work');
 
-    switch (exercise.tracking_type) {
-      case 'weight_reps':
-        strengthTotal += workSets.reduce((s, set) => s + (set.weight ?? 0) * (set.reps ?? 0), 0);
-        break;
-      case 'reps_only':
-        strengthTotal += workSets.reduce((s, set) => s + (set.reps ?? 0), 0);
-        break;
-      case 'time_only':
-        isometricTotal += workSets.reduce((s, set) => s + (set.duration_seconds ?? 0), 0);
-        break;
-      case 'distance_time':
-        cardioTime += workSets.reduce((s, set) => s + (set.duration_seconds ?? 0), 0);
-        cardioDistance += workSets.reduce((s, set) => s + (set.distance_meters ?? 0), 0);
-        break;
+      switch (exercise.tracking_type) {
+        case 'weight_reps':
+          strengthTotal += workSets.reduce((s, set) => s + (set.weight ?? 0) * (set.reps ?? 0), 0);
+          break;
+        case 'reps_only':
+          strengthTotal += workSets.reduce((s, set) => s + (set.reps ?? 0), 0);
+          break;
+        case 'time_only':
+          isometricTotal += workSets.reduce((s, set) => s + (set.duration_seconds ?? 0), 0);
+          break;
+        case 'distance_time':
+          cardioTime += workSets.reduce((s, set) => s + (set.duration_seconds ?? 0), 0);
+          cardioDistance += workSets.reduce((s, set) => s + (set.distance_meters ?? 0), 0);
+          break;
+      }
     }
   }
 
@@ -190,32 +173,32 @@ export async function getSessionSummary(sessionId: number): Promise<SessionSumma
 }
 
 export async function getAllSessionSummaries(): Promise<SessionSummary[]> {
-  const sessions = await db.sessions.orderBy('date').reverse().toArray();
-  return Promise.all(sessions.map(s => getSessionSummary(s.id!)));
+  const { data: sessions } = await supabase.from('sessions').select('*').order('date', { ascending: false });
+  if (!sessions) return [];
+  return Promise.all(sessions.map(s => getSessionSummary(s.id)));
 }
-
-// ==================== NEW: Exercise History ====================
 
 export interface ExerciseHistoryEntry {
   date: string;
-  sessionId: number;
+  sessionId: string;
   sets: WorkoutSet[];
   totalMetric: number;
 }
 
-export async function getExerciseHistory(exerciseId: number, trackingType: TrackingType): Promise<ExerciseHistoryEntry[]> {
-  const allSessions = await db.sessions.orderBy('date').reverse().toArray();
+export async function getExerciseHistory(exerciseId: string, trackingType: TrackingType): Promise<ExerciseHistoryEntry[]> {
+  const { data: sessions } = await supabase.from('sessions').select('*').order('date', { ascending: false });
+  if (!sessions) return [];
   const results: ExerciseHistoryEntry[] = [];
 
-  for (const session of allSessions) {
-    const ses = await db.sessionExercises.where({ session_id: session.id!, exercise_id: exerciseId }).toArray();
-    if (!ses.length) continue;
-    const allSets = await Promise.all(ses.map(se => db.sets.where({ session_exercise_id: se.id! }).toArray()));
-    const flatSets = allSets.flat();
-    const workSets = flatSets.filter(s => s.set_type === 'work');
+  for (const session of sessions) {
+    const { data: ses } = await supabase.from('session_exercises').select('id').eq('session_id', session.id).eq('exercise_id', exerciseId);
+    if (!ses?.length) continue;
+    const seIds = ses.map(se => se.id);
+    const { data: sets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
+    const workSets = (sets ?? []).filter(s => s.set_type === 'work');
     if (!workSets.length) continue;
     const totalMetric = workSets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
-    results.push({ date: session.date, sessionId: session.id!, sets: workSets, totalMetric });
+    results.push({ date: session.date, sessionId: session.id, sets: workSets, totalMetric });
   }
 
   return results;
@@ -227,7 +210,6 @@ export function formatSetSummary(sets: WorkoutSet[], trackingType: TrackingType)
 
   switch (trackingType) {
     case 'weight_reps': {
-      // Group by weight×reps
       const groups = new Map<string, number>();
       workSets.forEach(s => {
         const key = `${s.weight ?? 0}kg×${s.reps ?? 0}`;
@@ -235,45 +217,35 @@ export function formatSetSummary(sets: WorkoutSet[], trackingType: TrackingType)
       });
       return Array.from(groups.entries()).map(([k, count]) => count > 1 ? `${count}×${k}` : k).join(', ');
     }
-    case 'reps_only': {
-      const reps = workSets.map(s => s.reps ?? 0);
-      return reps.join(', ') + ' reps';
-    }
-    case 'time_only': {
-      const times = workSets.map(s => `${s.duration_seconds ?? 0}s`);
-      return times.join(', ');
-    }
-    case 'distance_time': {
-      const entries = workSets.map(s => `${s.distance_meters ?? 0}m/${s.duration_seconds ?? 0}s`);
-      return entries.join(', ');
-    }
+    case 'reps_only': return workSets.map(s => s.reps ?? 0).join(', ') + ' reps';
+    case 'time_only': return workSets.map(s => `${s.duration_seconds ?? 0}s`).join(', ');
+    case 'distance_time': return workSets.map(s => `${s.distance_meters ?? 0}m/${s.duration_seconds ?? 0}s`).join(', ');
   }
 }
 
-// ==================== NEW: Personal Records ====================
-
 export interface PersonalRecord {
-  exerciseId: number;
+  exerciseId: string;
   exerciseName: string;
   trackingType: TrackingType;
   records: { label: string; value: number; unit: string; date: string }[];
 }
 
 export async function getPersonalRecords(): Promise<PersonalRecord[]> {
-  const exercises = await db.exercises.toArray();
-  const allSessions = await db.sessions.toArray();
-  const sessionDateMap = new Map(allSessions.map(s => [s.id!, s.date]));
+  const { data: exercises } = await supabase.from('exercises').select('*');
+  const { data: allSessions } = await supabase.from('sessions').select('*');
+  if (!exercises || !allSessions) return [];
+  const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
   const results: PersonalRecord[] = [];
 
   for (const ex of exercises) {
-    const sesExs = await db.sessionExercises.where({ exercise_id: ex.id! }).toArray();
-    if (!sesExs.length) continue;
+    const { data: sesExs } = await supabase.from('session_exercises').select('*').eq('exercise_id', ex.id);
+    if (!sesExs?.length) continue;
 
     const allSets: { set: WorkoutSet; date: string }[] = [];
     for (const se of sesExs) {
       const date = sessionDateMap.get(se.session_id) ?? '';
-      const sets = await db.sets.where({ session_exercise_id: se.id! }).toArray();
-      sets.filter(s => s.set_type === 'work').forEach(s => allSets.push({ set: s, date }));
+      const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
+      (sets ?? []).filter(s => s.set_type === 'work').forEach(s => allSets.push({ set: s, date }));
     }
     if (!allSets.length) continue;
 
@@ -281,7 +253,6 @@ export async function getPersonalRecords(): Promise<PersonalRecord[]> {
 
     switch (ex.tracking_type) {
       case 'weight_reps': {
-        // Max weight
         let maxWeight = { value: 0, date: '' };
         let maxVolume = { value: 0, date: '' };
         for (const { set, date } of allSets) {
@@ -328,14 +299,12 @@ export async function getPersonalRecords(): Promise<PersonalRecord[]> {
     }
 
     if (records.length > 0) {
-      results.push({ exerciseId: ex.id!, exerciseName: ex.name, trackingType: ex.tracking_type, records });
+      results.push({ exerciseId: ex.id, exerciseName: ex.name, trackingType: ex.tracking_type, records });
     }
   }
 
   return results;
 }
-
-// ==================== NEW: Period Summaries ====================
 
 export interface PeriodSummary {
   label: string;
@@ -377,21 +346,23 @@ export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise
   const results: PeriodSummary[] = [];
 
   for (const period of periods) {
-    const sessions = await db.sessions.where('date').between(period.from, period.to, true, true).toArray();
+    const { data: sessions } = await supabase.from('sessions').select('*').gte('date', period.from).lte('date', period.to);
     let strengthTotal = 0, isometricTotal = 0, cardioTime = 0;
 
-    for (const session of sessions) {
-      const summary = await getSessionSummary(session.id!);
-      strengthTotal += summary.strengthTotal;
-      isometricTotal += summary.isometricTotal;
-      cardioTime += summary.cardioTime;
+    if (sessions) {
+      for (const session of sessions) {
+        const summary = await getSessionSummary(session.id);
+        strengthTotal += summary.strengthTotal;
+        isometricTotal += summary.isometricTotal;
+        cardioTime += summary.cardioTime;
+      }
     }
 
     results.push({
       label: period.label,
       from: period.from,
       to: period.to,
-      sessionCount: sessions.length,
+      sessionCount: sessions?.length ?? 0,
       strengthTotal,
       isometricTotal,
       cardioTime,

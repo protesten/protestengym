@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db, type Routine } from '@/db';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { getRoutines, createRoutine, updateRoutine, deleteRoutine, type Routine } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -9,7 +9,8 @@ import { toast } from 'sonner';
 import { Link } from 'react-router-dom';
 
 export default function Routines() {
-  const routines = useLiveQuery(() => db.routines.toArray());
+  const queryClient = useQueryClient();
+  const { data: routines } = useQuery({ queryKey: ['routines'], queryFn: getRoutines });
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editing, setEditing] = useState<Routine | null>(null);
   const [name, setName] = useState('');
@@ -17,23 +18,30 @@ export default function Routines() {
   function openCreate() { setEditing(null); setName(''); setDialogOpen(true); }
   function openEdit(r: Routine) { setEditing(r); setName(r.name); setDialogOpen(true); }
 
-  async function save() {
-    if (!name.trim()) { toast.error('Nombre requerido'); return; }
-    if (editing?.id) {
-      await db.routines.update(editing.id, { name });
-      toast.success('Rutina actualizada');
-    } else {
-      await db.routines.add({ name });
-      toast.success('Rutina creada');
-    }
-    setDialogOpen(false);
-  }
+  const saveMutation = useMutation({
+    mutationFn: async () => {
+      if (!name.trim()) throw new Error('Nombre requerido');
+      if (editing) {
+        await updateRoutine(editing.id, name);
+      } else {
+        await createRoutine(name);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['routines'] });
+      toast.success(editing ? 'Rutina actualizada' : 'Rutina creada');
+      setDialogOpen(false);
+    },
+    onError: (e) => toast.error(e.message),
+  });
 
-  async function remove(id: number) {
-    await db.routineExercises.where({ routine_id: id }).delete();
-    await db.routines.delete(id);
-    toast.success('Rutina eliminada');
-  }
+  const removeMutation = useMutation({
+    mutationFn: deleteRoutine,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['routines'] });
+      toast.success('Rutina eliminada');
+    },
+  });
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
@@ -51,7 +59,7 @@ export default function Routines() {
             </Link>
             <div className="flex gap-1 ml-2">
               <Button variant="ghost" size="icon" onClick={() => openEdit(r)}><Pencil className="h-4 w-4" /></Button>
-              <Button variant="ghost" size="icon" onClick={() => remove(r.id!)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+              <Button variant="ghost" size="icon" onClick={() => removeMutation.mutate(r.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
             </div>
           </div>
         ))}
@@ -63,7 +71,7 @@ export default function Routines() {
           <DialogHeader><DialogTitle>{editing ? 'Editar' : 'Nueva'} Rutina</DialogTitle></DialogHeader>
           <div className="space-y-4">
             <Input placeholder="Nombre de la rutina" value={name} onChange={e => setName(e.target.value)} />
-            <Button className="w-full" onClick={save}>Guardar</Button>
+            <Button className="w-full" onClick={() => saveMutation.mutate()}>Guardar</Button>
           </div>
         </DialogContent>
       </Dialog>

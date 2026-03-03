@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useLiveQuery } from 'dexie-react-hooks';
-import { db } from '@/db';
+import { useQuery, useMutation } from '@tanstack/react-query';
+import { getRoutines, getRoutineExercises, createSession, addSessionExercise } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,27 +11,32 @@ import { toast } from 'sonner';
 
 export default function NewSession() {
   const navigate = useNavigate();
-  const routines = useLiveQuery(() => db.routines.toArray());
+  const { data: routines } = useQuery({ queryKey: ['routines'], queryFn: getRoutines });
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [mode, setMode] = useState<'routine' | 'free'>('free');
   const [routineId, setRoutineId] = useState('');
 
-  async function start() {
-    const sessionId = await db.sessions.add({
-      date,
-      routine_id: mode === 'routine' && routineId ? Number(routineId) : undefined,
-    });
+  const startMutation = useMutation({
+    mutationFn: async () => {
+      const session = await createSession({
+        date,
+        routine_id: mode === 'routine' && routineId ? routineId : undefined,
+      });
 
-    if (mode === 'routine' && routineId) {
-      const reList = await db.routineExercises.where({ routine_id: Number(routineId) }).sortBy('order_index');
-      for (const re of reList) {
-        await db.sessionExercises.add({ session_id: sessionId as number, exercise_id: re.exercise_id, order_index: re.order_index });
+      if (mode === 'routine' && routineId) {
+        const reList = await getRoutineExercises(routineId);
+        for (const re of reList) {
+          await addSessionExercise(session.id, re.exercise_id, re.order_index);
+        }
       }
-    }
 
-    toast.success('Sesión iniciada');
-    navigate(`/session/${sessionId}`);
-  }
+      return session.id;
+    },
+    onSuccess: (sessionId) => {
+      toast.success('Sesión iniciada');
+      navigate(`/session/${sessionId}`);
+    },
+  });
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
@@ -54,12 +59,12 @@ export default function NewSession() {
             <Select value={routineId} onValueChange={setRoutineId}>
               <SelectTrigger><SelectValue placeholder="Seleccionar rutina" /></SelectTrigger>
               <SelectContent>
-                {routines?.map(r => <SelectItem key={r.id} value={String(r.id)}>{r.name}</SelectItem>)}
+                {routines?.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
               </SelectContent>
             </Select>
           </div>
         )}
-        <Button className="w-full" onClick={start} disabled={mode === 'routine' && !routineId}>Iniciar</Button>
+        <Button className="w-full" onClick={() => startMutation.mutate()} disabled={mode === 'routine' && !routineId}>Iniciar</Button>
       </div>
     </div>
   );
