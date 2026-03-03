@@ -3,11 +3,11 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
 import {
-  getSession, getSessionExercises, getExercises, getSetsBySession,
+  getSession, getSessionExercises, getAllExercises, getSetsBySession,
   updateSession, deleteSession as deleteSessionApi, addSessionExercise,
   createSet, updateSet as updateSetApi, deleteSet as deleteSetApi,
   deleteSessionExercise as deleteSeApi, updateSessionExercise,
-  createSession, type WorkoutSet,
+  createSession, type WorkoutSet, type AnyExercise,
 } from '@/lib/api';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
 import { SET_TYPE_LABELS, type SetType, type TrackingType } from '@/lib/constants';
@@ -63,7 +63,7 @@ export default function SessionDetail() {
 
   const { data: session } = useQuery({ queryKey: ['session', sessionId], queryFn: () => getSession(sessionId) });
   const { data: sessionExercises } = useQuery({ queryKey: ['session_exercises', sessionId], queryFn: () => getSessionExercises(sessionId) });
-  const { data: exercises } = useQuery({ queryKey: ['exercises'], queryFn: getExercises });
+  const { data: exercises } = useQuery({ queryKey: ['all_exercises'], queryFn: getAllExercises });
   const { data: allSets } = useQuery({ queryKey: ['sets', sessionId], queryFn: () => getSetsBySession(sessionId) });
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [addExId, setAddExId] = useState('');
@@ -156,7 +156,7 @@ export default function SessionDetail() {
     onSuccess: () => invalidateSession(),
   });
 
-  const getExercise = (exId: string) => exercises?.find(e => e.id === exId);
+  const getExercise = (exId: string) => exercises?.find(e => e.id === exId) as AnyExercise | undefined;
   const getSets = (seId: string) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
   if (!session) return <div className="p-4">Cargando...</div>;
@@ -263,7 +263,7 @@ export default function SessionDetail() {
               <AccordionContent>
                 <div className="space-y-1">
                   {sets.map(s => (
-                    <SetRow key={s.id} set={s} trackingType={ex?.tracking_type ?? 'weight_reps'} onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })} onDelete={() => deleteSetMutation.mutate(s.id)} />
+                    <SetRow key={s.id} set={s} trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType} onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })} onDelete={() => deleteSetMutation.mutate(s.id)} />
                   ))}
                 </div>
                 <Button variant="outline" size="sm" className="mt-2 w-full" onClick={() => addSetMutation.mutate(se.id)}>
@@ -279,7 +279,18 @@ export default function SessionDetail() {
         <Select value={addExId} onValueChange={setAddExId}>
           <SelectTrigger className="flex-1"><SelectValue placeholder="Añadir ejercicio..." /></SelectTrigger>
           <SelectContent>
-            {exercises?.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+            {exercises?.filter(e => e.source === 'predefined').length ? (
+              <>
+                <SelectItem value="__header_pred" disabled className="text-xs font-semibold text-muted-foreground">— Predefinidos —</SelectItem>
+                {exercises.filter(e => e.source === 'predefined').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+              </>
+            ) : null}
+            {exercises?.filter(e => e.source === 'personal').length ? (
+              <>
+                <SelectItem value="__header_pers" disabled className="text-xs font-semibold text-muted-foreground">— Mis ejercicios —</SelectItem>
+                {exercises.filter(e => e.source === 'personal').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+              </>
+            ) : null}
           </SelectContent>
         </Select>
         <Button size="icon" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>

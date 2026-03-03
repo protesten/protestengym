@@ -59,6 +59,33 @@ export type Database = {
         }
         Relationships: []
       }
+      predefined_exercises: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          primary_muscle_ids: number[] | null
+          secondary_muscle_ids: number[] | null
+          tracking_type: Database["public"]["Enums"]["tracking_type"]
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          primary_muscle_ids?: number[] | null
+          secondary_muscle_ids?: number[] | null
+          tracking_type?: Database["public"]["Enums"]["tracking_type"]
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          primary_muscle_ids?: number[] | null
+          secondary_muscle_ids?: number[] | null
+          tracking_type?: Database["public"]["Enums"]["tracking_type"]
+        }
+        Relationships: []
+      }
       profiles: {
         Row: {
           avatar_url: string | null
@@ -110,13 +137,6 @@ export type Database = {
         }
         Relationships: [
           {
-            foreignKeyName: "routine_exercises_exercise_id_fkey"
-            columns: ["exercise_id"]
-            isOneToOne: false
-            referencedRelation: "exercises"
-            referencedColumns: ["id"]
-          },
-          {
             foreignKeyName: "routine_exercises_routine_id_fkey"
             columns: ["routine_id"]
             isOneToOne: false
@@ -166,13 +186,6 @@ export type Database = {
           session_id?: string
         }
         Relationships: [
-          {
-            foreignKeyName: "session_exercises_exercise_id_fkey"
-            columns: ["exercise_id"]
-            isOneToOne: false
-            referencedRelation: "exercises"
-            referencedColumns: ["id"]
-          },
           {
             foreignKeyName: "session_exercises_session_id_fkey"
             columns: ["session_id"]
@@ -258,16 +271,42 @@ export type Database = {
           },
         ]
       }
+      user_roles: {
+        Row: {
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       owns_routine: { Args: { _routine_id: string }; Returns: boolean }
       owns_session: { Args: { _session_id: string }; Returns: boolean }
       owns_session_exercise: { Args: { _se_id: string }; Returns: boolean }
     }
     Enums: {
+      app_role: "admin" | "user"
       set_type: "warmup" | "approach" | "work"
       tracking_type: "weight_reps" | "reps_only" | "time_only" | "distance_time"
     }
@@ -397,6 +436,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
+      app_role: ["admin", "user"],
       set_type: ["warmup", "approach", "work"],
       tracking_type: ["weight_reps", "reps_only", "time_only", "distance_time"],
     },
