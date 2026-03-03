@@ -7,7 +7,8 @@ import {
   updateSession, deleteSession as deleteSessionApi, addSessionExercise,
   createSet, updateSet as updateSetApi, deleteSet as deleteSetApi,
   deleteSessionExercise as deleteSeApi, updateSessionExercise,
-  createSession, getRoutineExercises, type WorkoutSet, type AnyExercise,
+  createSession, getRoutineExercises, getPreviousSetsForExercise,
+  type WorkoutSet, type AnyExercise,
 } from '@/lib/api';
 import { getSessionSummary, type SessionSummary } from '@/db/calculations';
 import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType, type PlannedSet } from '@/lib/constants';
@@ -18,22 +19,27 @@ import { Calendar } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
+import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
+import { RestTimer } from '@/components/RestTimer';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
-function NumericInput({ value, placeholder, className, onSave }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void }) {
+function NumericInput({ value, placeholder, className, onSave, hint }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void; hint?: string }) {
   const [local, setLocal] = useState(value?.toString() ?? '');
   useEffect(() => { setLocal(value?.toString() ?? ''); }, [value]);
   return (
-    <Input
-      inputMode="decimal" placeholder={placeholder}
-      className={cn("rounded-md bg-secondary/50 border-border", className)}
-      value={local} onChange={e => setLocal(e.target.value)}
-      onBlur={() => { const parsed = local.trim() === '' ? null : Number(local); if (parsed !== value) onSave(parsed); }}
-    />
+    <div className="flex flex-col">
+      <Input
+        inputMode="decimal" placeholder={placeholder}
+        className={cn("rounded-md bg-secondary/50 border-border", className)}
+        value={local} onChange={e => setLocal(e.target.value)}
+        onBlur={() => { const parsed = local.trim() === '' ? null : Number(local); if (parsed !== value) onSave(parsed); }}
+      />
+      {hint && <span className="text-[9px] text-muted-foreground/60 font-mono mt-0.5 px-0.5 truncate">{hint}</span>}
+    </div>
   );
 }
 
@@ -57,13 +63,18 @@ function rpeColor(rpe: number | null | undefined): string {
   return 'text-red-400 bg-red-400/15';
 }
 
-function SetRow({ set, trackingType, plannedSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
+function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; prevSet?: WorkoutSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = (set as any).rpe;
   
-  // Build reps placeholder with range info
   const repsPlaceholder = plannedSet && plannedSet.min_reps != null && plannedSet.max_reps != null
     ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
     : 'reps';
+
+  // Build hints from previous session
+  const weightHint = prevSet?.weight != null ? `${prevSet.weight}` : undefined;
+  const repsHint = prevSet?.reps != null ? `${prevSet.reps}` : undefined;
+  const durationHint = prevSet?.duration_seconds != null ? `${prevSet.duration_seconds}` : undefined;
+  const distanceHint = prevSet?.distance_meters != null ? `${prevSet.distance_meters}` : undefined;
 
   return (
     <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/20 flex-wrap">
@@ -73,16 +84,16 @@ function SetRow({ set, trackingType, plannedSet, onUpdate, onDelete }: { set: Wo
       </Select>
       {(trackingType === 'weight_reps') && (
         <>
-          <NumericInput value={set.weight} placeholder="kg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
-          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+          <NumericInput value={set.weight} placeholder="kg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ weight: v })} hint={weightHint} />
+          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />
         </>
       )}
-      {trackingType === 'reps_only' && <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />}
-      {trackingType === 'time_only' && <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />}
+      {trackingType === 'reps_only' && <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />}
+      {trackingType === 'time_only' && <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />}
       {trackingType === 'distance_time' && (
         <>
-          <NumericInput value={set.duration_seconds} placeholder="seg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
-          <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
+          <NumericInput value={set.duration_seconds} placeholder="seg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
+          <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} hint={distanceHint} />
         </>
       )}
       <div className="flex items-center gap-1">
@@ -113,7 +124,6 @@ export default function SessionDetail() {
   const { data: exercises } = useQuery({ queryKey: ['all_exercises'], queryFn: getAllExercises });
   const { data: allSets } = useQuery({ queryKey: ['sets', sessionId], queryFn: () => getSetsBySession(sessionId) });
   
-  // Fetch routine planned sets when session comes from a routine
   const routineId = session?.routine_id;
   const { data: routineExercises } = useQuery({
     queryKey: ['routine_exercises', routineId],
@@ -121,7 +131,29 @@ export default function SessionDetail() {
     enabled: !!routineId,
   });
 
-  // Build a map: exercise_id → PlannedSet[]
+  // Fetch previous sets for each exercise in this session
+  const exerciseIds = useMemo(() => {
+    return [...new Set(sessionExercises?.map(se => se.exercise_id) ?? [])];
+  }, [sessionExercises]);
+
+  const { data: prevSetsMap } = useQuery({
+    queryKey: ['prev_sets', sessionId, exerciseIds],
+    queryFn: async () => {
+      const map = new Map<string, WorkoutSet[]>();
+      const results = await Promise.all(
+        exerciseIds.map(async (eid) => {
+          const sets = await getPreviousSetsForExercise(eid, sessionId);
+          return { eid, sets };
+        })
+      );
+      for (const { eid, sets } of results) {
+        map.set(eid, sets);
+      }
+      return map;
+    },
+    enabled: exerciseIds.length > 0,
+  });
+
   const plannedSetsMap = useMemo(() => {
     const map = new Map<string, PlannedSet[]>();
     if (!routineExercises) return map;
@@ -187,7 +219,7 @@ export default function SessionDetail() {
     onSuccess: () => invalidateSession(),
   });
 
-  const getExercise = (exId: string) => exercises?.find(e => e.id === exId) as AnyExercise | undefined;
+  const getExercise = (exId: string) => exercises?.find(e => e.id === exId) as (AnyExercise & { notes?: string | null }) | undefined;
   const getSets = (seId: string) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
   if (!session) return <div className="p-4 text-muted-foreground">Cargando...</div>;
@@ -244,6 +276,7 @@ export default function SessionDetail() {
           const ex = getExercise(se.exercise_id);
           const sets = getSets(se.id);
           const plannedSets = plannedSetsMap.get(se.exercise_id) ?? [];
+          const prevSets = prevSetsMap?.get(se.exercise_id) ?? [];
           const isFirst = idx === 0;
           const isLast = idx === (sessionExercises.length - 1);
           return (
@@ -254,6 +287,11 @@ export default function SessionDetail() {
                   <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'down' })}><ChevronDown className="h-3 w-3" /></Button>
                 </div>
                 <AccordionTrigger className="py-3 text-sm font-bold flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
+                <ExerciseNotePopover
+                  exerciseId={se.exercise_id}
+                  exerciseNotes={(ex as any)?.notes ?? null}
+                  source={ex?.source ?? 'personal'}
+                />
                 <AlertDialog>
                   <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
                   <AlertDialogContent className="bg-card border-border rounded-2xl">
@@ -270,6 +308,7 @@ export default function SessionDetail() {
                       set={s}
                       trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
                       plannedSet={plannedSets[setIdx]}
+                      prevSet={prevSets[setIdx]}
                       onUpdate={data => updateSetMutation.mutate({ setId: s.id, data })}
                       onDelete={() => deleteSetMutation.mutate(s.id)}
                     />
@@ -297,6 +336,9 @@ export default function SessionDetail() {
           {summary.cardioTime > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Cardio</span><span className="font-mono font-bold">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
         </div>
       )}
+
+      {/* Rest Timer */}
+      <RestTimer />
     </div>
   );
 }

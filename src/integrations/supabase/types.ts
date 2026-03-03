@@ -19,6 +19,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          notes: string | null
           primary_muscle_ids: number[] | null
           secondary_muscle_ids: number[] | null
           tracking_type: Database["public"]["Enums"]["tracking_type"]
@@ -28,6 +29,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          notes?: string | null
           primary_muscle_ids?: number[] | null
           secondary_muscle_ids?: number[] | null
           tracking_type?: Database["public"]["Enums"]["tracking_type"]
@@ -37,6 +39,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          notes?: string | null
           primary_muscle_ids?: number[] | null
           secondary_muscle_ids?: number[] | null
           tracking_type?: Database["public"]["Enums"]["tracking_type"]
@@ -64,6 +67,7 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          notes: string | null
           primary_muscle_ids: number[] | null
           secondary_muscle_ids: number[] | null
           tracking_type: Database["public"]["Enums"]["tracking_type"]
@@ -72,6 +76,7 @@ export type Database = {
           created_at?: string
           id?: string
           name: string
+          notes?: string | null
           primary_muscle_ids?: number[] | null
           secondary_muscle_ids?: number[] | null
           tracking_type?: Database["public"]["Enums"]["tracking_type"]
@@ -80,6 +85,7 @@ export type Database = {
           created_at?: string
           id?: string
           name?: string
+          notes?: string | null
           primary_muscle_ids?: number[] | null
           secondary_muscle_ids?: number[] | null
           tracking_type?: Database["public"]["Enums"]["tracking_type"]
