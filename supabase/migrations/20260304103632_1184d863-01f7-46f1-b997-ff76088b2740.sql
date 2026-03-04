@@ -1,0 +1,1 @@
+ALTER TABLE public.programs ADD COLUMN start_date date DEFAULT CURRENT_DATE;
