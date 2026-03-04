@@ -8,7 +8,7 @@ import {
   createSet, updateSet as updateSetApi, deleteSet as deleteSetApi,
   deleteSessionExercise as deleteSeApi, updateSessionExercise,
   createSession, getRoutineExercises, getPreviousSetsForExercise,
-  type WorkoutSet, type AnyExercise,
+  type WorkoutSet, type AnyExercise, type PreviousSessionData,
 } from '@/lib/api';
 import { getSessionSummary, checkForPR, type SessionSummary } from '@/db/calculations';
 import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType, type PlannedSet } from '@/lib/constants';
@@ -29,6 +29,7 @@ import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/ex
 import { SessionExportCard } from '@/components/SessionExportCard';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { PreviousSessionReference } from '@/components/PreviousSessionReference';
 
 function NumericInput({ value, placeholder, className, onSave, hint }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void; hint?: string }) {
   const [local, setLocal] = useState(value?.toString() ?? '');
@@ -142,15 +143,15 @@ export default function SessionDetail() {
   const { data: prevSetsMap } = useQuery({
     queryKey: ['prev_sets', sessionId, exerciseIds],
     queryFn: async () => {
-      const map = new Map<string, WorkoutSet[]>();
+      const map = new Map<string, PreviousSessionData>();
       const results = await Promise.all(
         exerciseIds.map(async (eid) => {
-          const sets = await getPreviousSetsForExercise(eid, sessionId);
-          return { eid, sets };
+          const result = await getPreviousSetsForExercise(eid, sessionId);
+          return { eid, result };
         })
       );
-      for (const { eid, sets } of results) {
-        map.set(eid, sets);
+      for (const { eid, result } of results) {
+        map.set(eid, result);
       }
       return map;
     },
@@ -347,7 +348,9 @@ export default function SessionDetail() {
           const ex = getExercise(se.exercise_id);
           const sets = getSets(se.id);
           const plannedSets = plannedSetsMap.get(se.exercise_id) ?? [];
-          const prevSets = prevSetsMap?.get(se.exercise_id) ?? [];
+          const prevData = prevSetsMap?.get(se.exercise_id);
+          const prevSets = prevData?.sets ?? [];
+          const prevDate = prevData?.date ?? null;
           const isFirst = idx === 0;
           const isLast = idx === (sessionExercises.length - 1);
           return (
@@ -375,6 +378,7 @@ export default function SessionDetail() {
                 </AlertDialog>
               </div>
               <AccordionContent>
+                <PreviousSessionReference sets={prevSets} date={prevDate} trackingType={ex?.tracking_type ?? 'weight_reps'} />
                 <div className="space-y-1.5">
                   {sets.map((s, setIdx) => (
                     <SetRow
