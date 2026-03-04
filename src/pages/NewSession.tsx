@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getRoutines, getRoutineExercises, createSession, addSessionExercise, createSet } from '@/lib/api';
 import { Button } from '@/components/ui/button';
@@ -12,10 +12,12 @@ import { Play, Zap } from 'lucide-react';
 
 export default function NewSession() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const preselectedRoutine = searchParams.get('routine');
   const { data: routines } = useQuery({ queryKey: ['routines'], queryFn: getRoutines });
   const [date, setDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [mode, setMode] = useState<'routine' | 'free'>('free');
-  const [routineId, setRoutineId] = useState('');
+  const [mode, setMode] = useState<'routine' | 'free'>(preselectedRoutine ? 'routine' : 'free');
+  const [routineId, setRoutineId] = useState(preselectedRoutine || '');
 
   const startMutation = useMutation({
     mutationFn: async () => {
