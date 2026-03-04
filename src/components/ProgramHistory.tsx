@@ -152,7 +152,7 @@ export function ProgramHistory({ programs }: ProgramHistoryProps) {
           <div className="flex items-center gap-1 text-[11px] text-muted-foreground">
             <CalendarDays className="h-3 w-3" />
             {format(new Date(startDate + 'T00:00:00'), 'd MMM', { locale: es })} — {format(new Date(endDate + 'T00:00:00'), 'd MMM yyyy', { locale: es })}
-            <span className="ml-1">· {program.weeks} sem.</span>
+            <span className="ml-1">· {program.weeks} días</span>
           </div>
 
           <div className="grid grid-cols-2 gap-2">
