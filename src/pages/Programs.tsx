@@ -7,6 +7,7 @@ import { getRoutines, type Routine } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { Progress } from '@/components/ui/progress';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -208,6 +209,21 @@ export default function Programs() {
             return (
               <div className={`p-2.5 rounded-xl border text-center text-xs font-bold ${isFinished ? 'bg-muted/50 border-border text-muted-foreground' : isValid ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-muted/50 border-border text-muted-foreground'}`}>
                 {isFinished ? '✅ Programa completado' : isValid ? `📍 Semana actual: ${currentWeek} de ${selectedProgram.weeks}` : sd ? 'Aún no ha comenzado' : 'Sin fecha de inicio'}
+              </div>
+            );
+          })()}
+
+          {(() => {
+            const sd = (selectedProgram as any).start_date;
+            const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
+            const progressValue = currentWeek && sd ? Math.min(100, (currentWeek / selectedProgram.weeks) * 100) : 0;
+            return (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs font-semibold text-muted-foreground mb-1">
+                  <span>Progreso</span>
+                  <span>{Math.round(progressValue)}%</span>
+                </div>
+                <Progress value={progressValue} className="h-2" />
               </div>
             );
           })()}
