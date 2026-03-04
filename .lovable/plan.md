@@ -1,111 +1,37 @@
 
 
-## Plan: 12 Nuevas Funcionalidades — Implementación por Fases
+## Problem
 
-Dado el volumen, propongo dividir en **4 sprints** para mantener calidad y poder probar cada grupo antes de avanzar.
+The bottom navigation bar shows 8 items (5 main + 3 more), which is too crowded on mobile screens. Additionally, some pages have content that overflows horizontally, requiring left-right scrolling.
 
----
+## Plan
 
-### Sprint 1: Mejoras en la sesión de entrenamiento
+### 1. Redesign BottomNav to show only 5 main items + a "More" menu
 
-**1. Valores de sesión anterior**
-- Al cargar un ejercicio en `SessionDetail`, consultar la última sesión donde se usó ese ejercicio
-- Mostrar peso/reps anteriores como texto gris debajo de cada campo de input
-- Formato: "Anterior: 80kg × 10"
+- Keep the 5 main items (Inicio, Ejercicios, Rutinas, Analisis, Perfil) visible in the bottom bar
+- Replace the 3 extra items (Medidas, Programas, Informe) with a "More" (Mas) button that opens a small popover/sheet upward with those links
+- This reduces the nav from 8 cramped icons to 5 comfortable ones
 
-**2. Temporizador de descanso**
-- Componente `RestTimer` flotante que aparece al completar una serie
-- Tiempos predeterminados: 60s, 90s, 120s, 180s (configurable en perfil)
-- Cuenta regresiva visual con barra de progreso circular
-- Vibración del navegador al terminar (`navigator.vibrate`)
+### 2. Prevent horizontal overflow globally
 
-**3. Notas por ejercicio**
-- Nueva columna `notes` (text, nullable) en tabla `exercises`
-- Icono de nota en `SessionDetail` junto al nombre del ejercicio
-- Al tocar, abre un popover para ver/editar la nota persistente
-- Útil para: "Agarre ancho", "Ajuste de máquina: 5", "Codo pegado al cuerpo"
+- Add `overflow-x: hidden` on the root/body in `src/index.css`
+- Add `w-full overflow-hidden` or `max-w-full` to the main wrapper in `App.tsx`
 
----
+### 3. Fix specific pages with potential overflow
 
-### Sprint 2: Análisis avanzado
+- **Analysis page** (`src/pages/Analysis.tsx`): The TabsList has 7 tabs in a row. Add `overflow-x-auto` with horizontal scroll or wrap them into 2 rows. The muscle comparison grid uses fixed `w-24` columns that may overflow -- change to responsive sizing.
+- **Measurements page**: The grid layout looks fine (cols-2, cols-3) but ensure inputs don't overflow.
+- **All pages**: Already use `max-w-lg mx-auto` which is good. Add `overflow-x-hidden` as a safety net.
 
-**4. Series por músculo por semana**
-- Nueva pestaña en `Analysis.tsx` o integrar en la tab "Músculo"
-- Calcular working sets (solo tipo 'work') por grupo muscular en la semana actual
-- Mostrar barra de progreso vs objetivo configurable (ej: 10-20 sets/semana)
-- Código de colores: rojo (<10), amarillo (10-15), verde (15-20), naranja (>20)
+### 4. Desktop layout
 
-**5. Estimación de 1RM**
-- Fórmula Epley: `1RM = peso × (1 + reps/30)`
-- Calcular automáticamente para cada ejercicio weight_reps
-- Mostrar en la tab PRs y en el historial del ejercicio
-- Gráfico de evolución del 1RM estimado en el tiempo
+- The existing `max-w-lg mx-auto` pattern centers content nicely on desktop. No changes needed there.
+- The bottom nav already has `max-w-lg mx-auto` for the inner content.
 
-**6. Racha y consistencia**
-- Calcular racha actual (semanas consecutivas con al menos 1 sesión)
-- Calendario de actividad estilo GitHub (grid de cuadrados coloreados por intensidad)
-- Stats: sesiones este mes, media semanal, mejor racha, días desde última sesión
-- Mostrar racha prominente en la página de Inicio
+### Files to modify
 
-**7. Notificación de PR en vivo**
-- Al guardar peso/reps en `SetRow`, comparar con el máximo histórico
-- Si supera el PR: animación de confetti/celebración + toast especial
-- Guardar automáticamente como nuevo PR
-- Badge "🏆 PR" junto a la serie que lo batió
-
----
-
-### Sprint 3: Planificación y medidas
-
-**8. Medidas corporales**
-- Nueva tabla `body_measurements`: user_id, date, weight_kg, body_fat_pct, chest_cm, waist_cm, arm_cm, thigh_cm, notes
-- Nueva página `/measurements` con formulario de registro y gráficos de evolución
-- Añadir al menú de navegación o como sub-sección del perfil
-
-**9. Calculadora de calentamiento**
-- Dado el peso de trabajo, generar series progresivas automáticas
-- Ejemplo para 100kg: barra vacía (20kg) × 10, 50kg × 8, 70kg × 5, 85kg × 3, luego trabajo
-- Configurable: peso de barra, porcentajes, reps por nivel
-- Botón "Generar calentamiento" en cada ejercicio dentro de la sesión
-
-**10. Programación por bloques/mesociclos**
-- Nueva tabla `programs`: id, user_id, name, weeks, deload_week, created_at
-- Nueva tabla `program_weeks`: id, program_id, week_number, routine_id, notes
-- UI para crear un programa de 4-8 semanas asignando rutinas a cada semana
-- Vista de calendario/timeline del bloque con deload automático
-- Al iniciar sesión, sugerir la rutina del día según el programa activo
-
----
-
-### Sprint 4: Exportación e informes
-
-**11. Informe mensual automático**
-- Generar resumen al inicio de cada mes (o bajo demanda)
-- Contenido: sesiones completadas, volumen total, PRs batidos, músculos más/menos trabajados, tendencia de 1RM, racha
-- Renderizar como card visual en la app
-- Opción de descargar como imagen (html2canvas)
-
-**12. Exportar/compartir entrenamientos**
-- Exportar sesión individual como imagen compartible (estilo Instagram story)
-- Exportar historial completo como CSV
-- Compartir rutina via link (generar URL pública de solo lectura)
-- Botones de compartir en `SessionDetail` y `RoutineDetail`
-
----
-
-### Base de datos (migraciones necesarias)
-
-| Tabla/Columna | Cambio |
-|---|---|
-| `exercises.notes` | Nueva columna text nullable |
-| `body_measurements` | Nueva tabla completa con RLS |
-| `programs` | Nueva tabla con RLS |
-| `program_weeks` | Nueva tabla con RLS |
-| `profiles.preferences` | Ampliar jsonb para rest_timer_seconds, weekly_set_targets |
-
-### Orden de implementación sugerido
-
-Empezamos por **Sprint 1** (3 features de sesión) que son las que más impacto inmediato tienen en la experiencia de entrenamiento diario. Cada sprint se puede implementar y probar antes de pasar al siguiente.
-
-**¿Empezamos con el Sprint 1?**
+- `src/components/BottomNav.tsx` -- Restructure to 5 items + "More" popover
+- `src/index.css` -- Add `overflow-x: hidden` to body/html
+- `src/pages/Analysis.tsx` -- Fix TabsList overflow, fix muscle grid fixed widths
+- `src/App.tsx` -- Add overflow-x-hidden wrapper
 
