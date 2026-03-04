@@ -69,14 +69,14 @@ export default function Analysis() {
         Análisis
       </h1>
       <Tabs defaultValue="exercise">
-        <TabsList className="w-full flex-wrap h-auto gap-1 bg-secondary/50 rounded-xl p-1">
-          <TabsTrigger value="exercise" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Ejercicio</TabsTrigger>
-          <TabsTrigger value="muscle" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Músculo</TabsTrigger>
-          <TabsTrigger value="volume" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Volumen</TabsTrigger>
-          <TabsTrigger value="1rm" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>
-          <TabsTrigger value="prs" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>
-          <TabsTrigger value="streak" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Racha</TabsTrigger>
-          <TabsTrigger value="summary" className="flex-1 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
+        <TabsList className="w-full grid grid-cols-4 h-auto gap-1 bg-secondary/50 rounded-xl p-1">
+          <TabsTrigger value="exercise" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Ejercicio</TabsTrigger>
+          <TabsTrigger value="muscle" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Músculo</TabsTrigger>
+          <TabsTrigger value="volume" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Volumen</TabsTrigger>
+          <TabsTrigger value="1rm" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>
+          <TabsTrigger value="prs" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>
+          <TabsTrigger value="streak" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Racha</TabsTrigger>
+          <TabsTrigger value="summary" className="col-span-2 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
         </TabsList>
 
         <TabsContent value="exercise" className="space-y-4 mt-4">
@@ -134,14 +134,14 @@ export default function Analysis() {
             <button onClick={() => setMusclePeriod('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mes</button>
           </div>
           <div className="space-y-1">
-            <div className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-1 text-xs text-muted-foreground font-semibold">
-              <span>Músculo</span><span className="w-24 text-center">Fuerza</span><span className="w-24 text-center">Isométrico</span>
+            <div className="grid grid-cols-3 gap-2 px-3 py-1 text-xs text-muted-foreground font-semibold">
+              <span>Músculo</span><span className="text-center">Fuerza</span><span className="text-center">Isométrico</span>
             </div>
             {currentMuscleData.map(m => (
-              <div key={m.muscleId} className="grid grid-cols-[1fr_auto_auto] gap-2 px-3 py-2.5 rounded-xl bg-card border border-border items-center">
-                <span className="text-sm font-semibold">{m.muscleName}</span>
-                <div className="w-24 text-center"><ArrowBadge c={m.strength} /></div>
-                <div className="w-24 text-center"><ArrowBadge c={m.isometric} /></div>
+              <div key={m.muscleId} className="grid grid-cols-3 gap-2 px-3 py-2.5 rounded-xl bg-card border border-border items-center">
+                <span className="text-sm font-semibold truncate">{m.muscleName}</span>
+                <div className="text-center"><ArrowBadge c={m.strength} /></div>
+                <div className="text-center"><ArrowBadge c={m.isometric} /></div>
               </div>
             ))}
           </div>

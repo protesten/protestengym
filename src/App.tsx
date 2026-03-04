@@ -31,17 +31,17 @@ const App = () => (
         <BrowserRouter>
           <Routes>
             <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<ProtectedRoute><div className="min-h-screen pb-16"><Index /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/exercises" element={<ProtectedRoute><div className="min-h-screen pb-16"><Exercises /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/routines" element={<ProtectedRoute><div className="min-h-screen pb-16"><Routines /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/routines/:id" element={<ProtectedRoute><div className="min-h-screen pb-16"><RoutineDetail /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/session/new" element={<ProtectedRoute><div className="min-h-screen pb-16"><NewSession /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/session/:id" element={<ProtectedRoute><div className="min-h-screen pb-16"><SessionDetail /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/analysis" element={<ProtectedRoute><div className="min-h-screen pb-16"><Analysis /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/measurements" element={<ProtectedRoute><div className="min-h-screen pb-16"><Measurements /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/programs" element={<ProtectedRoute><div className="min-h-screen pb-16"><Programs /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/report" element={<ProtectedRoute><div className="min-h-screen pb-16"><MonthlyReport /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><div className="min-h-screen pb-16"><Profile /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Index /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/exercises" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Exercises /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/routines" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Routines /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/routines/:id" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><RoutineDetail /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/session/new" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><NewSession /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/session/:id" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><SessionDetail /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/analysis" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Analysis /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/measurements" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Measurements /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/programs" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Programs /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/report" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><MonthlyReport /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/profile" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Profile /><BottomNav /></div></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
