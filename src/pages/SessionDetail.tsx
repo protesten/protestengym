@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -24,7 +24,9 @@ import { RestTimer } from '@/components/RestTimer';
 import { WarmupCalculator } from '@/components/WarmupCalculator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2 } from 'lucide-react';
+import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
+import { SessionExportCard } from '@/components/SessionExportCard';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -169,6 +171,8 @@ export default function SessionDetail() {
   const [addExId, setAddExId] = useState('');
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
+  const [showExportCard, setShowExportCard] = useState(false);
+  const exportCardRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (session) setNotes(session.notes ?? ''); }, [session]);
   useEffect(() => { getSessionSummary(sessionId).then(setSummary); }, [sessionId, allSets]);
@@ -245,6 +249,46 @@ export default function SessionDetail() {
   const getExercise = (exId: string) => exercises?.find(e => e.id === exId) as (AnyExercise & { notes?: string | null }) | undefined;
   const getSets = (seId: string) => allSets?.filter(s => s.session_exercise_id === seId) ?? [];
 
+  const buildExportData = () => {
+    if (!sessionExercises) return [];
+    return sessionExercises.map(se => {
+      const ex = getExercise(se.exercise_id);
+      return { name: ex?.name ?? 'Ejercicio', sets: getSets(se.id), trackingType: ex?.tracking_type ?? 'weight_reps' };
+    });
+  };
+
+  const handleExportSession = async () => {
+    setShowExportCard(true);
+    await new Promise(r => setTimeout(r, 100));
+    if (exportCardRef.current) {
+      await exportElementAsImage(exportCardRef.current, `sesion-${session.date}.png`);
+      toast.success('Imagen descargada');
+    }
+    setShowExportCard(false);
+  };
+
+  const handleShareSession = async () => {
+    setShowExportCard(true);
+    await new Promise(r => setTimeout(r, 100));
+    if (exportCardRef.current) {
+      await shareElementAsImage(exportCardRef.current, `Sesión ${session.date}`);
+    }
+    setShowExportCard(false);
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Ejercicio', 'Serie', 'Tipo', 'Peso (kg)', 'Reps', 'Duración (s)', 'Distancia (m)', 'RPE'];
+    const rows: string[][] = [];
+    sessionExercises?.forEach(se => {
+      const ex = getExercise(se.exercise_id);
+      getSets(se.id).forEach((s, i) => {
+        rows.push([ex?.name ?? '', String(i + 1), s.set_type, String(s.weight ?? ''), String(s.reps ?? ''), String(s.duration_seconds ?? ''), String(s.distance_meters ?? ''), String(s.rpe ?? '')]);
+      });
+    });
+    exportAsCSV(headers, rows, `sesion-${session.date}.csv`);
+    toast.success('CSV exportado');
+  };
+
   if (!session) return <div className="p-4 text-muted-foreground">Cargando...</div>;
 
   return (
@@ -266,6 +310,9 @@ export default function SessionDetail() {
           </PopoverContent>
         </Popover>
         <div className="flex gap-1">
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleExportSession} title="Descargar imagen"><Download className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleShareSession} title="Compartir"><Share2 className="h-4 w-4" /></Button>
+          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleExportCSV} title="Exportar CSV"><span className="text-[10px] font-mono font-bold">CSV</span></Button>
           <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateMutation.mutate()} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
           <AlertDialog>
             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
@@ -365,6 +412,18 @@ export default function SessionDetail() {
 
       {/* Rest Timer */}
       <RestTimer />
+
+      {/* Hidden export card */}
+      {showExportCard && (
+        <div className="fixed left-[-9999px] top-0">
+          <SessionExportCard
+            ref={exportCardRef}
+            date={session.date}
+            exercises={buildExportData()}
+            summary={{ strengthTotal: summary?.strengthTotal ?? 0, isometricTotal: summary?.isometricTotal ?? 0, cardioTime: summary?.cardioTime ?? 0 }}
+          />
+        </div>
+      )}
     </div>
   );
 }
