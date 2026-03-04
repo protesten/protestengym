@@ -16,40 +16,82 @@ export type Database = {
     Tables: {
       body_measurements: {
         Row: {
+          abdomen_cm: number | null
           arm_cm: number | null
+          bicep_left_contracted_cm: number | null
+          bicep_left_relaxed_cm: number | null
+          bicep_right_contracted_cm: number | null
+          bicep_right_relaxed_cm: number | null
           body_fat_pct: number | null
+          calf_left_cm: number | null
+          calf_right_cm: number | null
           chest_cm: number | null
           created_at: string
           date: string
+          hip_cm: number | null
           id: string
+          neck_cm: number | null
           notes: string | null
+          subgluteal_right_cm: number | null
           thigh_cm: number | null
+          thigh_left_contracted_cm: number | null
+          thigh_left_relaxed_cm: number | null
+          thigh_right_contracted_cm: number | null
+          thigh_right_relaxed_cm: number | null
           user_id: string
           waist_cm: number | null
           weight_kg: number | null
         }
         Insert: {
+          abdomen_cm?: number | null
           arm_cm?: number | null
+          bicep_left_contracted_cm?: number | null
+          bicep_left_relaxed_cm?: number | null
+          bicep_right_contracted_cm?: number | null
+          bicep_right_relaxed_cm?: number | null
           body_fat_pct?: number | null
+          calf_left_cm?: number | null
+          calf_right_cm?: number | null
           chest_cm?: number | null
           created_at?: string
           date?: string
+          hip_cm?: number | null
           id?: string
+          neck_cm?: number | null
           notes?: string | null
+          subgluteal_right_cm?: number | null
           thigh_cm?: number | null
+          thigh_left_contracted_cm?: number | null
+          thigh_left_relaxed_cm?: number | null
+          thigh_right_contracted_cm?: number | null
+          thigh_right_relaxed_cm?: number | null
           user_id: string
           waist_cm?: number | null
           weight_kg?: number | null
         }
         Update: {
+          abdomen_cm?: number | null
           arm_cm?: number | null
+          bicep_left_contracted_cm?: number | null
+          bicep_left_relaxed_cm?: number | null
+          bicep_right_contracted_cm?: number | null
+          bicep_right_relaxed_cm?: number | null
           body_fat_pct?: number | null
+          calf_left_cm?: number | null
+          calf_right_cm?: number | null
           chest_cm?: number | null
           created_at?: string
           date?: string
+          hip_cm?: number | null
           id?: string
+          neck_cm?: number | null
           notes?: string | null
+          subgluteal_right_cm?: number | null
           thigh_cm?: number | null
+          thigh_left_contracted_cm?: number | null
+          thigh_left_relaxed_cm?: number | null
+          thigh_right_contracted_cm?: number | null
+          thigh_right_relaxed_cm?: number | null
           user_id?: string
           waist_cm?: number | null
           weight_kg?: number | null
@@ -137,8 +179,10 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          birth_date: string | null
           created_at: string
           display_name: string | null
+          height_cm: number | null
           id: string
           preferences: Json | null
           updated_at: string
@@ -146,8 +190,10 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          birth_date?: string | null
           created_at?: string
           display_name?: string | null
+          height_cm?: number | null
           id?: string
           preferences?: Json | null
           updated_at?: string
@@ -155,8 +201,10 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          birth_date?: string | null
           created_at?: string
           display_name?: string | null
+          height_cm?: number | null
           id?: string
           preferences?: Json | null
           updated_at?: string
