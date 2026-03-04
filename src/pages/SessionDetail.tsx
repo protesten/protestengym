@@ -24,7 +24,7 @@ import { RestTimer } from '@/components/RestTimer';
 import { WarmupCalculator } from '@/components/WarmupCalculator';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2 } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2, TrendingUp, TrendingDown, Equal } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { SessionExportCard } from '@/components/SessionExportCard';
 import { cn } from '@/lib/utils';
@@ -67,6 +67,14 @@ function rpeColor(rpe: number | null | undefined): string {
   return 'text-red-400 bg-red-400/15';
 }
 
+function DeltaBadge({ current, previous }: { current: number | null; previous: number | null | undefined }) {
+  if (current == null || previous == null) return null;
+  const diff = current - previous;
+  if (diff === 0) return <Equal className="h-3 w-3 text-muted-foreground/50" />;
+  if (diff > 0) return <TrendingUp className="h-3 w-3 text-green-400" />;
+  return <TrendingDown className="h-3 w-3 text-red-400" />;
+}
+
 function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; prevSet?: WorkoutSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = (set as any).rpe;
   
@@ -80,8 +88,44 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
   const durationHint = prevSet?.duration_seconds != null ? `${prevSet.duration_seconds}` : undefined;
   const distanceHint = prevSet?.distance_meters != null ? `${prevSet.distance_meters}` : undefined;
 
+  // Compute overall comparison for the set
+  const getSetComparison = (): 'up' | 'down' | 'equal' | null => {
+    if (!prevSet) return null;
+    if (trackingType === 'weight_reps') {
+      if (set.weight == null || set.reps == null) return null;
+      if (prevSet.weight == null || prevSet.reps == null) return null;
+      const curVol = set.weight * set.reps;
+      const prevVol = prevSet.weight * prevSet.reps;
+      if (curVol > prevVol) return 'up';
+      if (curVol < prevVol) return 'down';
+      return 'equal';
+    }
+    if (trackingType === 'reps_only') {
+      if (set.reps == null || prevSet.reps == null) return null;
+      if (set.reps > prevSet.reps) return 'up';
+      if (set.reps < prevSet.reps) return 'down';
+      return 'equal';
+    }
+    if (trackingType === 'time_only') {
+      if (set.duration_seconds == null || prevSet.duration_seconds == null) return null;
+      if (set.duration_seconds > prevSet.duration_seconds) return 'up';
+      if (set.duration_seconds < prevSet.duration_seconds) return 'down';
+      return 'equal';
+    }
+    if (trackingType === 'distance_time') {
+      if (set.distance_meters == null || prevSet.distance_meters == null) return null;
+      if (set.distance_meters > prevSet.distance_meters) return 'up';
+      if (set.distance_meters < prevSet.distance_meters) return 'down';
+      return 'equal';
+    }
+    return null;
+  };
+
+  const comparison = getSetComparison();
+  const borderClass = comparison === 'up' ? 'border-l-2 border-l-green-400' : comparison === 'down' ? 'border-l-2 border-l-red-400' : comparison === 'equal' ? 'border-l-2 border-l-muted-foreground/30' : '';
+
   return (
-    <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/20 flex-wrap">
+    <div className={cn("flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/20 flex-wrap", borderClass)}>
       <Select value={set.set_type} onValueChange={v => onUpdate({ set_type: v as SetType })}>
         <SelectTrigger className="w-24 h-8 text-xs rounded-md bg-card border-border"><SelectValue /></SelectTrigger>
         <SelectContent>{Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
@@ -89,15 +133,29 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
       {(trackingType === 'weight_reps') && (
         <>
           <NumericInput value={set.weight} placeholder="kg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ weight: v })} hint={weightHint} />
+          <DeltaBadge current={set.weight} previous={prevSet?.weight} />
           <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />
+          <DeltaBadge current={set.reps} previous={prevSet?.reps} />
         </>
       )}
-      {trackingType === 'reps_only' && <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />}
-      {trackingType === 'time_only' && <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />}
+      {trackingType === 'reps_only' && (
+        <>
+          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />
+          <DeltaBadge current={set.reps} previous={prevSet?.reps} />
+        </>
+      )}
+      {trackingType === 'time_only' && (
+        <>
+          <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
+          <DeltaBadge current={set.duration_seconds} previous={prevSet?.duration_seconds} />
+        </>
+      )}
       {trackingType === 'distance_time' && (
         <>
           <NumericInput value={set.duration_seconds} placeholder="seg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
+          <DeltaBadge current={set.duration_seconds} previous={prevSet?.duration_seconds} />
           <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} hint={distanceHint} />
+          <DeltaBadge current={set.distance_meters} previous={prevSet?.distance_meters} />
         </>
       )}
       <div className="flex items-center gap-1">
