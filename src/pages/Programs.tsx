@@ -17,6 +17,7 @@ import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
+import { ProgramHistory } from '@/components/ProgramHistory';
 
 interface Program {
   id: string;
@@ -357,6 +358,10 @@ export default function Programs() {
               <p className="text-center text-muted-foreground text-sm py-8">Sin programas. Crea tu primer bloque de entrenamiento.</p>
             )}
           </div>
+
+          {programs && programs.length > 0 && (
+            <ProgramHistory programs={programs.map(p => ({ ...p, start_date: (p as any).start_date ?? null }))} />
+          )}
         </>
       )}
     </div>
