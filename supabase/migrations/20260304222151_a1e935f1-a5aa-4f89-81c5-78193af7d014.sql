@@ -1,0 +1,1 @@
+ALTER TABLE public.program_weeks ADD COLUMN order_index integer NOT NULL DEFAULT 0;

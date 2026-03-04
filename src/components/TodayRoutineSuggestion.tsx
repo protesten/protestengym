@@ -4,6 +4,11 @@ import { Link } from 'react-router-dom';
 import { CalendarCheck, ChevronRight, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
+interface TodayRoutine {
+  routineId: string;
+  routineName: string;
+}
+
 export function TodayRoutineSuggestion() {
   const { data } = useQuery({
     queryKey: ['today-routine-suggestion'],
@@ -27,29 +32,37 @@ export function TodayRoutineSuggestion() {
 
       if (currentWeek < 1 || currentWeek > program.weeks) return null;
 
-      // 3. Get routine for this week
+      // 3. Get ALL routines for this day (multiple entries possible)
       const { data: weeks, error: wErr } = await supabase
         .from('program_weeks')
         .select('*')
         .eq('program_id', program.id)
         .eq('week_number', currentWeek)
-        .limit(1);
-      if (wErr || !weeks?.length || !weeks[0].routine_id) return null;
+        .order('order_index');
+      if (wErr || !weeks?.length) return null;
 
-      // 4. Get routine name
-      const { data: routine, error: rErr } = await supabase
+      const routineIds = weeks.map(w => w.routine_id).filter(Boolean) as string[];
+      if (!routineIds.length) return null;
+
+      // 4. Get routine names
+      const { data: routinesData, error: rErr } = await supabase
         .from('routines')
         .select('id, name')
-        .eq('id', weeks[0].routine_id)
-        .single();
-      if (rErr || !routine) return null;
+        .in('id', routineIds);
+      if (rErr || !routinesData?.length) return null;
+
+      // Maintain order
+      const routineMap = new Map(routinesData.map(r => [r.id, r]));
+      const routines: TodayRoutine[] = routineIds
+        .map(id => routineMap.get(id))
+        .filter(Boolean)
+        .map(r => ({ routineId: r!.id, routineName: r!.name }));
 
       const isDeload = program.deload_week === currentWeek;
 
       return {
         programName: program.name,
-        routineId: routine.id,
-        routineName: routine.name,
+        routines,
         currentWeek,
         totalWeeks: program.weeks,
         isDeload,
@@ -58,38 +71,43 @@ export function TodayRoutineSuggestion() {
     staleTime: 5 * 60 * 1000,
   });
 
-  if (!data) return null;
+  if (!data || !data.routines.length) return null;
 
   return (
     <div className="rounded-xl bg-card border border-border p-4 space-y-3">
       <div className="flex items-center gap-2">
         <CalendarCheck className="h-4 w-4 text-primary" />
-        <h3 className="text-sm font-bold">Rutina de hoy</h3>
+        <h3 className="text-sm font-bold">{data.routines.length > 1 ? 'Rutinas de hoy' : 'Rutina de hoy'}</h3>
         <span className="ml-auto text-[10px] text-muted-foreground font-medium">
           Sem. {data.currentWeek}/{data.totalWeeks}
         </span>
       </div>
-      <div className="flex items-center justify-between">
-        <div>
-          <p className="text-base font-bold">{data.routineName}</p>
-          <p className="text-[10px] text-muted-foreground">
-            {data.programName}
-            {data.isDeload && <span className="ml-1.5 text-yellow-500 font-semibold">· DELOAD</span>}
-          </p>
+
+      {data.routines.map((r, i) => (
+        <div key={r.routineId} className="flex items-center justify-between">
+          <div>
+            <p className="text-base font-bold">{r.routineName}</p>
+            {i === 0 && (
+              <p className="text-[10px] text-muted-foreground">
+                {data.programName}
+                {data.isDeload && <span className="ml-1.5 text-yellow-500 font-semibold">· DELOAD</span>}
+              </p>
+            )}
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Link to={`/routines/${r.routineId}`}>
+              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </Link>
+            <Link to={`/session/new?routine=${r.routineId}`}>
+              <Button size="icon" className="h-9 w-9 rounded-xl gradient-primary text-primary-foreground border-0 glow-primary">
+                <Play className="h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
         </div>
-        <div className="flex items-center gap-1.5">
-          <Link to={`/routines/${data.routineId}`}>
-            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-              <ChevronRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link to={`/session/new?routine=${data.routineId}`}>
-            <Button size="icon" className="h-9 w-9 rounded-xl gradient-primary text-primary-foreground border-0 glow-primary">
-              <Play className="h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
