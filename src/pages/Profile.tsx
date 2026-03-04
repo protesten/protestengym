@@ -19,6 +19,7 @@ export default function Profile() {
   const [units, setUnits] = useState('kg');
   const [heightCm, setHeightCm] = useState('');
   const [birthDate, setBirthDate] = useState('');
+  const [sex, setSex] = useState('');
 
   useEffect(() => {
     if (profile) {
@@ -27,6 +28,7 @@ export default function Profile() {
       setUnits(prefs?.units ?? 'kg');
       setHeightCm((profile as any).height_cm?.toString() ?? '');
       setBirthDate((profile as any).birth_date ?? '');
+      setSex((profile as any).sex ?? '');
     }
   }, [profile]);
 
@@ -42,6 +44,7 @@ export default function Profile() {
       else updateData.height_cm = null;
       if (birthDate.trim()) updateData.birth_date = birthDate;
       else updateData.birth_date = null;
+      updateData.sex = sex || null;
       const { error } = await supabase.from('profiles').update(updateData).eq('user_id', u.id);
       if (error) throw error;
     },
@@ -82,6 +85,16 @@ export default function Profile() {
             <Label className="text-xs font-semibold text-muted-foreground">Fecha de nacimiento</Label>
             <Input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} className="rounded-lg bg-card border-border" />
           </div>
+        </div>
+        <div>
+          <Label className="text-xs font-semibold text-muted-foreground">Sexo</Label>
+          <Select value={sex} onValueChange={setSex}>
+            <SelectTrigger className="rounded-lg bg-card border-border"><SelectValue placeholder="Seleccionar" /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="male">Masculino</SelectItem>
+              <SelectItem value="female">Femenino</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Label className="text-xs font-semibold text-muted-foreground">Unidades de peso</Label>

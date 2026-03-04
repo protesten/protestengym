@@ -45,6 +45,7 @@ export function AnthropometricAnalysis({ latestMeasurement }: Props) {
 
   const heightCm = (profile as any)?.height_cm as number | null;
   const birthDate = (profile as any)?.birth_date as string | null;
+  const sex = (profile as any)?.sex as string | null;
   const weight = m.weight_kg as number | null;
 
   const cards: IndexCard[] = [];
@@ -66,7 +67,7 @@ export function AnthropometricAnalysis({ latestMeasurement }: Props) {
   // Waist-Hip Ratio
   if (m.waist_cm && m.hip_cm) {
     const ratio = m.waist_cm / m.hip_cm;
-    const cat = whrCategory(ratio);
+    const cat = whrCategory(ratio, sex !== 'female');
     cards.push({ label: 'Cintura / Cadera', value: ratio.toFixed(2), status: cat.status, icon: <Ruler className="h-4 w-4" />, detail: cat.label });
   }
 
