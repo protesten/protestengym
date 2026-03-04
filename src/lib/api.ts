@@ -269,3 +269,22 @@ export async function updateProfile(data: TablesUpdate<'profiles'>) {
   const { error } = await supabase.from('profiles').update(data).eq('user_id', user.id);
   if (error) throw error;
 }
+
+// ============ Admin: User Approval ============
+export async function getPendingUsers() {
+  const { data, error } = await (supabase
+    .from('profiles')
+    .select('*') as any)
+    .eq('is_approved', false)
+    .order('created_at', { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
+export async function approveUser(profileId: string) {
+  const { error } = await supabase
+    .from('profiles')
+    .update({ is_approved: true } as any)
+    .eq('id', profileId);
+  if (error) throw error;
+}

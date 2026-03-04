@@ -184,6 +184,7 @@ export type Database = {
           display_name: string | null
           height_cm: number | null
           id: string
+          is_approved: boolean
           preferences: Json | null
           sex: string | null
           updated_at: string
@@ -196,6 +197,7 @@ export type Database = {
           display_name?: string | null
           height_cm?: number | null
           id?: string
+          is_approved?: boolean
           preferences?: Json | null
           sex?: string | null
           updated_at?: string
@@ -208,6 +210,7 @@ export type Database = {
           display_name?: string | null
           height_cm?: number | null
           id?: string
+          is_approved?: boolean
           preferences?: Json | null
           sex?: string | null
           updated_at?: string
