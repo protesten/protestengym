@@ -1,6 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar } from 'lucide-react';
-import { useState } from 'react';
+import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText } from 'lucide-react';
 
 const mainItems = [
   { to: '/', icon: Home, label: 'Inicio' },
@@ -13,6 +12,7 @@ const mainItems = [
 const moreItems = [
   { to: '/measurements', icon: Ruler, label: 'Medidas' },
   { to: '/programs', icon: Calendar, label: 'Programas' },
+  { to: '/report', icon: FileText, label: 'Informe' },
 ];
 
 export function BottomNav() {
