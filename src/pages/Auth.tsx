@@ -36,7 +36,7 @@ export default function Auth() {
         <div className="inline-flex items-center justify-center w-20 h-20 rounded-2xl gradient-primary mb-6 glow-primary">
           <Dumbbell className="h-10 w-10 text-primary-foreground" />
         </div>
-        <h1 className="text-4xl font-black tracking-tight mb-2"><span className="text-gradient">ProtestenGym</span></h1>
+        <h1 className="text-4xl font-black tracking-tight mb-2">Protesten<span className="text-gradient">Gym</span></h1>
         <p className="text-muted-foreground text-lg">Registra y analiza tu progreso</p>
       </div>
       
