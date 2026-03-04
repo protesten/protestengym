@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { getAllExercises } from '@/lib/api';
-import { getWeeklyMuscleSets, getAll1RMs, get1RMHistory, type WeeklyMuscleSets, type ExerciseRM, type RM1History } from '@/db/calculations';
+import { getWeeklyMuscleSets, getAll1RMs, get1RMHistory, type WeeklyMuscleSets, type ExerciseRM, type RM1History, type DateRange } from '@/db/calculations';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Target, TrendingUp, Info, ChevronLeft, ChevronRight } from 'lucide-react';
@@ -21,18 +21,31 @@ function setsColorText(sets: number): string {
   return 'text-orange-400';
 }
 
-export function WeeklyMuscleVolume() {
+interface VolumeProps {
+  dateRange?: DateRange;
+}
+
+export function WeeklyMuscleVolume({ dateRange }: VolumeProps) {
   const [data, setData] = useState<WeeklyMuscleSets[]>([]);
   const [weeksBack, setWeeksBack] = useState(0);
   const [prevData, setPrevData] = useState<WeeklyMuscleSets[]>([]);
 
+  const hasCustomRange = !!dateRange;
+
   useEffect(() => {
-    getWeeklyMuscleSets(weeksBack).then(setData);
-    getWeeklyMuscleSets(weeksBack + 1).then(setPrevData);
-  }, [weeksBack]);
+    if (hasCustomRange) {
+      getWeeklyMuscleSets(0, dateRange).then(setData);
+      setPrevData([]);
+    } else {
+      getWeeklyMuscleSets(weeksBack).then(setData);
+      getWeeklyMuscleSets(weeksBack + 1).then(setPrevData);
+    }
+  }, [weeksBack, dateRange]);
 
   const target = 15;
-  const weekLabel = weeksBack === 0 ? 'Esta semana' : weeksBack === 1 ? 'Semana pasada' : `Hace ${weeksBack} semanas`;
+  const weekLabel = hasCustomRange
+    ? `${dateRange!.from} → ${dateRange!.to}`
+    : weeksBack === 0 ? 'Esta semana' : weeksBack === 1 ? 'Semana pasada' : `Hace ${weeksBack} semanas`;
 
   return (
     <div className="space-y-2">
@@ -41,16 +54,22 @@ export function WeeklyMuscleVolume() {
           <Target className="h-4 w-4 text-primary" />
           <h3 className="text-sm font-bold">Series por Músculo</h3>
         </div>
-        <div className="flex items-center gap-1">
-          <button onClick={() => setWeeksBack(w => w + 1)} className="p-1 rounded-md hover:bg-secondary transition-colors">
-            <ChevronLeft className="h-4 w-4 text-muted-foreground" />
-          </button>
-          <span className="text-xs text-muted-foreground font-medium min-w-[100px] text-center">{weekLabel}</span>
-          <button onClick={() => setWeeksBack(w => Math.max(0, w - 1))} disabled={weeksBack === 0} className="p-1 rounded-md hover:bg-secondary transition-colors disabled:opacity-30">
-            <ChevronRight className="h-4 w-4 text-muted-foreground" />
-          </button>
-        </div>
+        {!hasCustomRange && (
+          <div className="flex items-center gap-1">
+            <button onClick={() => setWeeksBack(w => w + 1)} className="p-1 rounded-md hover:bg-secondary transition-colors">
+              <ChevronLeft className="h-4 w-4 text-muted-foreground" />
+            </button>
+            <span className="text-xs text-muted-foreground font-medium min-w-[100px] text-center">{weekLabel}</span>
+            <button onClick={() => setWeeksBack(w => Math.max(0, w - 1))} disabled={weeksBack === 0} className="p-1 rounded-md hover:bg-secondary transition-colors disabled:opacity-30">
+              <ChevronRight className="h-4 w-4 text-muted-foreground" />
+            </button>
+          </div>
+        )}
       </div>
+
+      {hasCustomRange && (
+        <p className="text-[10px] text-muted-foreground">Período: {weekLabel}</p>
+      )}
 
       {/* Explanation */}
       <div className="flex items-start gap-2 p-2.5 rounded-lg bg-secondary/30 border border-border">
@@ -62,7 +81,7 @@ export function WeeklyMuscleVolume() {
       </div>
 
       {data.length === 0 ? (
-        <p className="text-center text-muted-foreground text-sm py-4">Sin datos esta semana</p>
+        <p className="text-center text-muted-foreground text-sm py-4">Sin datos en este período</p>
       ) : (
         <div className="space-y-1.5">
           {data.map(m => {
@@ -102,17 +121,21 @@ export function WeeklyMuscleVolume() {
   );
 }
 
-export function OneRMPanel() {
+interface OneRMProps {
+  dateRange?: DateRange;
+}
+
+export function OneRMPanel({ dateRange }: OneRMProps) {
   const { data: exercises } = useQuery({ queryKey: ['allExercises'], queryFn: getAllExercises });
   const [rms, setRMs] = useState<ExerciseRM[]>([]);
   const [selectedExId, setSelectedExId] = useState('');
   const [rmHistory, setRmHistory] = useState<RM1History[]>([]);
 
-  useEffect(() => { getAll1RMs().then(setRMs); }, []);
+  useEffect(() => { getAll1RMs(dateRange).then(setRMs); }, [dateRange]);
   useEffect(() => {
-    if (selectedExId) get1RMHistory(selectedExId).then(setRmHistory);
+    if (selectedExId) get1RMHistory(selectedExId, dateRange).then(setRmHistory);
     else setRmHistory([]);
-  }, [selectedExId]);
+  }, [selectedExId, dateRange]);
 
   const chartData = rmHistory.map(h => ({ date: h.date.slice(5), value: h.estimated1RM }));
   const weightRepsExercises = exercises?.filter(e => e.tracking_type === 'weight_reps') ?? [];
@@ -165,7 +188,7 @@ export function OneRMPanel() {
         </div>
       )}
 
-      {rms.length === 0 && <p className="text-center text-muted-foreground text-sm py-4">Sin datos de peso+reps aún</p>}
+      {rms.length === 0 && <p className="text-center text-muted-foreground text-sm py-4">Sin datos de peso+reps en este período</p>}
     </div>
   );
 }

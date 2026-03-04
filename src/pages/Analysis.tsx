@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getAllExercises, type AnyExercise } from '@/lib/api';
+import { getAllExercises } from '@/lib/api';
 import {
   getExerciseComparisons, getMuscleComparisons,
   getExerciseHistory, formatSetSummary, getPersonalRecords, getPeriodSummaries,
-  type MuscleVolume, type Comparison,
+  type MuscleVolume, type Comparison, type DateRange,
   type ExerciseHistoryEntry, type PersonalRecord, type PeriodSummary,
 } from '@/db/calculations';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,6 +14,7 @@ import { ComparisonRow } from '@/components/ComparisonRow';
 import { Progress } from '@/components/ui/progress';
 import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
 import { StreakCard } from '@/components/StreakCard';
+import { DateRangeSelector } from '@/components/DateRangeSelector';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock } from 'lucide-react';
 
@@ -22,7 +23,7 @@ function ArrowBadge({ c }: { c: Comparison }) {
   return <span className={`text-xs font-mono ${cls}`}>{c.current} {c.arrow}</span>;
 }
 
-function DeltaIndicator({ current, previous, unit = '' }: { current: number; previous: number; unit?: string }) {
+function DeltaIndicator({ current, previous }: { current: number; previous: number }) {
   if (previous === 0 && current === 0) return null;
   const diff = current - previous;
   const pct = previous > 0 ? Math.round((diff / previous) * 100) : current > 0 ? 100 : 0;
@@ -33,9 +34,10 @@ function DeltaIndicator({ current, previous, unit = '' }: { current: number; pre
 
 export default function Analysis() {
   const { data: exercises } = useQuery({ queryKey: ['allExercises'], queryFn: getAllExercises });
+  const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedExId, setSelectedExId] = useState('');
   const [exComps, setExComps] = useState<{ week: any; month: any; lastSession: any } | null>(null);
-  const [muscleData, setMuscleData] = useState<{ week: MuscleVolume[]; month: MuscleVolume[] }>({ week: [], month: [] });
+  const [muscleData, setMuscleData] = useState<MuscleVolume[]>([]);
   const [musclePeriod, setMusclePeriod] = useState<'7d' | 'month'>('7d');
   const [history, setHistory] = useState<ExerciseHistoryEntry[]>([]);
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
@@ -44,22 +46,33 @@ export default function Analysis() {
 
   const selectedEx = exercises?.find(e => e.id === selectedExId);
 
+  // Exercise tab
   useEffect(() => {
     if (!selectedExId || !selectedEx) return;
-    getExerciseComparisons(selectedEx.id, selectedEx.tracking_type as any).then(setExComps);
-    getExerciseHistory(selectedEx.id, selectedEx.tracking_type as any).then(setHistory);
-  }, [selectedExId, exercises]);
+    getExerciseComparisons(selectedEx.id, selectedEx.tracking_type as any, dateRange).then(setExComps);
+    getExerciseHistory(selectedEx.id, selectedEx.tracking_type as any, dateRange).then(setHistory);
+  }, [selectedExId, exercises, dateRange]);
 
+  // Muscle tab
   useEffect(() => {
-    getMuscleComparisons('7d').then(w => setMuscleData(prev => ({ ...prev, week: w })));
-    getMuscleComparisons('month').then(m => setMuscleData(prev => ({ ...prev, month: m })));
-    getPersonalRecords().then(setPrs);
-  }, []);
+    if (dateRange) {
+      getMuscleComparisons('7d', dateRange).then(setMuscleData);
+    } else {
+      getMuscleComparisons(musclePeriod).then(setMuscleData);
+    }
+  }, [musclePeriod, dateRange]);
 
-  useEffect(() => { getPeriodSummaries(periodGranularity).then(setPeriodData); }, [periodGranularity]);
+  // PRs tab
+  useEffect(() => {
+    getPersonalRecords(dateRange).then(setPrs);
+  }, [dateRange]);
+
+  // Summary tab
+  useEffect(() => {
+    getPeriodSummaries(periodGranularity, dateRange).then(setPeriodData);
+  }, [periodGranularity, dateRange]);
 
   const unitLabel = selectedEx ? (selectedEx.tracking_type === 'time_only' || selectedEx.tracking_type === 'distance_time' ? 's' : '') : '';
-  const currentMuscleData = musclePeriod === '7d' ? muscleData.week : muscleData.month;
   const metricLabel = selectedEx
     ? selectedEx.tracking_type === 'weight_reps' ? 'Volumen (kg)' 
     : selectedEx.tracking_type === 'reps_only' ? 'Reps'
@@ -69,7 +82,6 @@ export default function Analysis() {
   const maxStrength = Math.max(...periodData.map(p => p.strengthTotal), 1);
   const maxIso = Math.max(...periodData.map(p => p.isometricTotal), 1);
 
-  // Bar chart data for summary
   const barChartData = [...periodData].reverse().map(p => ({
     label: p.label.length > 10 ? p.label.slice(0, 8) + '…' : p.label,
     fuerza: Math.round(p.strengthTotal),
@@ -79,10 +91,16 @@ export default function Analysis() {
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
-      <h1 className="text-xl font-black mb-4 flex items-center gap-2">
+      <h1 className="text-xl font-black mb-3 flex items-center gap-2">
         <BarChart3 className="h-5 w-5 text-primary" />
         Análisis
       </h1>
+
+      {/* Global date range selector */}
+      <div className="mb-4">
+        <DateRangeSelector value={dateRange} onChange={setDateRange} />
+      </div>
+
       <Tabs defaultValue="exercise">
         <TabsList className="w-full grid grid-cols-4 h-auto gap-1 bg-secondary/50 rounded-xl p-1">
           <TabsTrigger value="exercise" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Ejercicio</TabsTrigger>
@@ -114,9 +132,15 @@ export default function Analysis() {
           </Select>
           {exComps && (
             <div className="space-y-2">
-              <ComparisonRow label="Última sesión" comparison={exComps.lastSession} unit={unitLabel} />
-              <ComparisonRow label="Últimos 7 días" comparison={exComps.week} unit={unitLabel} />
-              <ComparisonRow label="Mes actual" comparison={exComps.month} unit={unitLabel} />
+              {dateRange ? (
+                <ComparisonRow label="Período seleccionado" comparison={exComps.week} unit={unitLabel} />
+              ) : (
+                <>
+                  <ComparisonRow label="Última sesión" comparison={exComps.lastSession} unit={unitLabel} />
+                  <ComparisonRow label="Últimos 7 días" comparison={exComps.week} unit={unitLabel} />
+                  <ComparisonRow label="Mes actual" comparison={exComps.month} unit={unitLabel} />
+                </>
+              )}
             </div>
           )}
           {chartData.length > 1 && (
@@ -157,18 +181,20 @@ export default function Analysis() {
         </TabsContent>
 
         <TabsContent value="muscle" className="mt-4">
-          <div className="flex gap-2 mb-4">
-            <button onClick={() => setMusclePeriod('7d')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === '7d' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>7 días</button>
-            <button onClick={() => setMusclePeriod('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mes</button>
-          </div>
-          {currentMuscleData.length === 0 ? (
+          {!dateRange && (
+            <div className="flex gap-2 mb-4">
+              <button onClick={() => setMusclePeriod('7d')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === '7d' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>7 días</button>
+              <button onClick={() => setMusclePeriod('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mes</button>
+            </div>
+          )}
+          {muscleData.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">Sin datos de volumen muscular en este período</p>
           ) : (
             <div className="space-y-1">
               <div className="grid grid-cols-3 gap-2 px-3 py-1 text-xs text-muted-foreground font-semibold">
                 <span>Músculo</span><span className="text-center">Fuerza</span><span className="text-center">Isométrico</span>
               </div>
-              {currentMuscleData.map(m => (
+              {muscleData.map(m => (
                 <div key={m.muscleId} className="grid grid-cols-3 gap-2 px-3 py-2.5 rounded-xl bg-card border border-border items-center">
                   <span className="text-sm font-semibold truncate">{m.muscleName}</span>
                   <div className="text-center"><ArrowBadge c={m.strength} /></div>
@@ -180,16 +206,16 @@ export default function Analysis() {
         </TabsContent>
 
         <TabsContent value="volume" className="mt-4">
-          <WeeklyMuscleVolume />
+          <WeeklyMuscleVolume dateRange={dateRange} />
         </TabsContent>
 
         <TabsContent value="1rm" className="mt-4">
-          <OneRMPanel />
+          <OneRMPanel dateRange={dateRange} />
         </TabsContent>
 
         <TabsContent value="prs" className="mt-4">
           {prs.length === 0 ? (
-            <p className="text-center text-muted-foreground text-sm py-8">Sin récords aún. Completa sesiones para ver tus PRs.</p>
+            <p className="text-center text-muted-foreground text-sm py-8">Sin récords en este período.</p>
           ) : (
             <div className="space-y-3">
               {prs.map(pr => (
@@ -218,13 +244,15 @@ export default function Analysis() {
         </TabsContent>
 
         <TabsContent value="summary" className="mt-4 space-y-4">
-          <div className="flex gap-2">
-            <button onClick={() => setPeriodGranularity('week')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${periodGranularity === 'week' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Semanal</button>
-            <button onClick={() => setPeriodGranularity('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${periodGranularity === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mensual</button>
-          </div>
+          {!dateRange && (
+            <div className="flex gap-2">
+              <button onClick={() => setPeriodGranularity('week')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${periodGranularity === 'week' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Semanal</button>
+              <button onClick={() => setPeriodGranularity('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${periodGranularity === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mensual</button>
+            </div>
+          )}
 
           {/* Summary bar chart */}
-          {barChartData.length > 0 && barChartData.some(d => d.sesiones > 0) && (
+          {barChartData.length > 1 && barChartData.some(d => d.sesiones > 0) && (
             <div className="rounded-xl bg-card border border-border p-3">
               <h3 className="text-xs font-bold mb-2 text-muted-foreground">Sesiones por período</h3>
               <ResponsiveContainer width="100%" height={140}>
@@ -249,7 +277,6 @@ export default function Analysis() {
                     <span className="text-xs text-muted-foreground font-semibold">{p.sessionCount} sesión{p.sessionCount !== 1 ? 'es' : ''}</span>
                   </div>
                   
-                  {/* Key metrics row */}
                   <div className="grid grid-cols-3 gap-2">
                     <div className="bg-secondary/30 rounded-lg p-2 text-center">
                       <Dumbbell className="h-3 w-3 mx-auto mb-0.5 text-muted-foreground" />
