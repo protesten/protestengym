@@ -5,7 +5,7 @@ import { getSessions, deleteSession as deleteSessionApi } from '@/lib/api';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { ArrowLeft, Trash2, ChevronRight } from 'lucide-react';
+import { ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
@@ -100,8 +100,8 @@ export default function SessionCalendar() {
                   </Link>
                   <div className="flex items-center gap-1 shrink-0">
                     <Link to={`/session/${s.id}`}>
-                      <Button variant="ghost" size="icon" className="h-8 w-8">
-                        <ChevronRight className="h-4 w-4" />
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-primary">
+                        <Pencil className="h-4 w-4" />
                       </Button>
                     </Link>
                     <AlertDialog>
