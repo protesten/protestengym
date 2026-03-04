@@ -23,9 +23,20 @@ export type AnyExercise = {
 
 // ============ Muscles ============
 export async function getMuscles() {
+  const { data, error } = await supabase.from('muscles').select('*').eq('is_active', true).order('id');
+  if (error) throw error;
+  return data;
+}
+
+export async function getAllMusclesIncludingInactive() {
   const { data, error } = await supabase.from('muscles').select('*').order('id');
   if (error) throw error;
   return data;
+}
+
+export async function toggleMuscleActive(id: number, isActive: boolean) {
+  const { error } = await supabase.from('muscles').update({ is_active: isActive } as any).eq('id', id);
+  if (error) throw error;
 }
 
 // ============ Exercises (personal) ============

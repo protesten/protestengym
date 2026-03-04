@@ -12,11 +12,12 @@ import {
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { TrendingUp } from 'lucide-react';
-import { computeFatigue, type SessionData } from '@/lib/fatigue-config';
+import { computeFatigue, type SessionData, type RecoveryCategory } from '@/lib/fatigue-config';
 
 interface FatigueHistoryProps {
   sessions: SessionData[];
   muscleNames: Map<number, string>;
+  recoveryMap?: Map<number, RecoveryCategory>;
 }
 
 // Muscle group definitions for chart readability
@@ -48,7 +49,7 @@ function getGroupAvgFatigue(groupIds: number[], fatigueMap: Map<number, number>)
   return count > 0 ? Math.round(sum / count) : 0;
 }
 
-export function FatigueHistory({ sessions, muscleNames }: FatigueHistoryProps) {
+export function FatigueHistory({ sessions, muscleNames, recoveryMap }: FatigueHistoryProps) {
   const [range, setRange] = useState<RangeKey>('7d');
   const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set());
 
@@ -71,7 +72,7 @@ export function FatigueHistory({ sessions, muscleNames }: FatigueHistoryProps) {
       date.setHours(23, 59, 59, 999);
       const asOf = date.getTime();
 
-      const fatigueMap = computeFatigue(sessions, asOf);
+      const fatigueMap = computeFatigue(sessions, asOf, recoveryMap);
 
       const point: Record<string, any> = {
         date: date.toLocaleDateString('es-ES', { weekday: 'short', day: 'numeric' }),

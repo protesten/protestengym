@@ -16,6 +16,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Plus, Pencil, Trash2, Search } from 'lucide-react';
 import { toast } from 'sonner';
 import MuscleSelect from '@/components/MuscleSelect';
+import CreateExerciseDialog from '@/components/CreateExerciseDialog';
 
 type ExForm = { name: string; tracking_type: TrackingType; primary_muscle_ids: number[]; secondary_muscle_ids: number[] };
 
@@ -27,6 +28,7 @@ export default function Exercises() {
   const { data: admin } = useQuery({ queryKey: ['isAdmin'], queryFn: isAdmin });
   const [search, setSearch] = useState('');
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [createPersonalOpen, setCreatePersonalOpen] = useState(false);
   const [editingPersonal, setEditingPersonal] = useState<Exercise | null>(null);
   const [editingPredefined, setEditingPredefined] = useState<PredefinedExercise | null>(null);
   const [isPredefinedMode, setIsPredefinedMode] = useState(false);
@@ -63,7 +65,7 @@ export default function Exercises() {
   const removePersonalMutation = useMutation({ mutationFn: deleteExercise, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['exercises'] }); toast.success('Ejercicio eliminado'); } });
   const removePredefinedMutation = useMutation({ mutationFn: deletePredefinedExercise, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['predefined_exercises'] }); toast.success('Ejercicio predefinido eliminado'); } });
 
-  function openCreatePersonal() { setEditingPersonal(null); setEditingPredefined(null); setIsPredefinedMode(false); setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] }); setDialogOpen(true); }
+  function openCreatePersonal() { setCreatePersonalOpen(true); }
   function openCreatePredefined() { setEditingPersonal(null); setEditingPredefined(null); setIsPredefinedMode(true); setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] }); setDialogOpen(true); }
   function openEditPersonal(ex: Exercise) { setEditingPersonal(ex); setEditingPredefined(null); setIsPredefinedMode(false); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [] }); setDialogOpen(true); }
   function openEditPredefined(ex: PredefinedExercise) { setEditingPredefined(ex); setEditingPersonal(null); setIsPredefinedMode(true); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [] }); setDialogOpen(true); }
@@ -151,6 +153,8 @@ export default function Exercises() {
           </div>
         </DialogContent>
       </Dialog>
+
+      <CreateExerciseDialog open={createPersonalOpen} onOpenChange={setCreatePersonalOpen} />
     </div>
   );
 }

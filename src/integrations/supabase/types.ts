@@ -133,16 +133,25 @@ export type Database = {
       }
       muscles: {
         Row: {
+          body_region: string | null
           id: number
+          is_active: boolean
           name: string
+          recovery_category: string
         }
         Insert: {
+          body_region?: string | null
           id?: number
+          is_active?: boolean
           name: string
+          recovery_category?: string
         }
         Update: {
+          body_region?: string | null
           id?: number
+          is_active?: boolean
           name?: string
+          recovery_category?: string
         }
         Relationships: []
       }
