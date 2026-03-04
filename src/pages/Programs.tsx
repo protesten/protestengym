@@ -27,6 +27,7 @@ interface Program {
   deload_week: number | null;
   is_active: boolean;
   created_at: string;
+  start_date: string | null;
 }
 
 interface ProgramWeek {
@@ -35,6 +36,7 @@ interface ProgramWeek {
   week_number: number;
   routine_id: string | null;
   notes: string | null;
+  order_index: number;
 }
 
 export default function Programs() {
@@ -52,7 +54,7 @@ export default function Programs() {
     queryFn: async () => {
       const { data, error } = await supabase.from('programs').select('*').order('created_at', { ascending: false });
       if (error) throw error;
-      return data as Program[];
+      return data as unknown as Program[];
     },
   });
 
@@ -62,12 +64,24 @@ export default function Programs() {
     queryKey: ['program_weeks', selectedProgramId],
     queryFn: async () => {
       if (!selectedProgramId) return [];
-      const { data, error } = await supabase.from('program_weeks').select('*').eq('program_id', selectedProgramId).order('week_number');
+      const { data, error } = await supabase.from('program_weeks').select('*').eq('program_id', selectedProgramId).order('week_number').order('order_index');
       if (error) throw error;
-      return data as ProgramWeek[];
+      return data as unknown as ProgramWeek[];
     },
     enabled: !!selectedProgramId,
   });
+
+  // Group program weeks by day number
+  const dayGroups = useMemo(() => {
+    if (!programWeeks) return [];
+    const map = new Map<number, ProgramWeek[]>();
+    for (const pw of programWeeks) {
+      const arr = map.get(pw.week_number) || [];
+      arr.push(pw);
+      map.set(pw.week_number, arr);
+    }
+    return Array.from(map.entries()).sort((a, b) => a[0] - b[0]);
+  }, [programWeeks]);
 
   const createMutation = useMutation({
     mutationFn: async () => {
@@ -79,10 +93,11 @@ export default function Programs() {
         .insert({ user_id: user.id, name, weeks: numWeeks, deload_week: dl, start_date: format(startDate, 'yyyy-MM-dd') } as any)
         .select().single();
       if (error) throw error;
-      // Create week entries
+      // Create one entry per day (no routine assigned yet)
       const weekRows = Array.from({ length: numWeeks }, (_, i) => ({
         program_id: (prog as any).id,
         week_number: i + 1,
+        order_index: 0,
       }));
       const { error: wErr } = await supabase.from('program_weeks').insert(weekRows);
       if (wErr) throw wErr;
@@ -107,11 +122,46 @@ export default function Programs() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ['program_weeks', selectedProgramId] }),
   });
 
+  const addRoutineToDayMutation = useMutation({
+    mutationFn: async (weekNumber: number) => {
+      if (!selectedProgramId) return;
+      const dayEntries = programWeeks?.filter(pw => pw.week_number === weekNumber) ?? [];
+      const maxOrder = dayEntries.length > 0 ? Math.max(...dayEntries.map(e => e.order_index)) : -1;
+      const { error } = await supabase.from('program_weeks').insert({
+        program_id: selectedProgramId,
+        week_number: weekNumber,
+        order_index: maxOrder + 1,
+      });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program_weeks', selectedProgramId] });
+      toast.success('Rutina añadida al día');
+    },
+  });
+
+  const removeRoutineEntryMutation = useMutation({
+    mutationFn: async ({ weekId, weekNumber }: { weekId: string; weekNumber: number }) => {
+      // Don't allow removing the last entry for a day
+      const dayEntries = programWeeks?.filter(pw => pw.week_number === weekNumber) ?? [];
+      if (dayEntries.length <= 1) {
+        // Just clear the routine_id instead
+        const { error } = await supabase.from('program_weeks').update({ routine_id: null }).eq('id', weekId);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.from('program_weeks').delete().eq('id', weekId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['program_weeks', selectedProgramId] });
+    },
+  });
+
   const toggleActiveMutation = useMutation({
     mutationFn: async (programId: string) => {
       const program = programs?.find(p => p.id === programId);
       if (!program) return;
-      // Deactivate all programs first
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
       await supabase.from('programs').update({ is_active: false }).eq('user_id', user.id);
@@ -185,15 +235,15 @@ export default function Programs() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg bg-secondary/50 border-border justify-start font-normal">
                   <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {(selectedProgram as any).start_date
-                    ? format(new Date((selectedProgram as any).start_date + 'T00:00:00'), "PPP", { locale: es })
+                  {selectedProgram.start_date
+                    ? format(new Date(selectedProgram.start_date + 'T00:00:00'), "PPP", { locale: es })
                     : 'Sin fecha'}
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
                 <CalendarComponent
                   mode="single"
-                  selected={(selectedProgram as any).start_date ? new Date((selectedProgram as any).start_date + 'T00:00:00') : undefined}
+                  selected={selectedProgram.start_date ? new Date(selectedProgram.start_date + 'T00:00:00') : undefined}
                   onSelect={(d) => d && updateStartDateMutation.mutate(d)}
                   initialFocus
                   className={cn("p-3 pointer-events-auto")}
@@ -203,19 +253,19 @@ export default function Programs() {
           </div>
 
           {(() => {
-            const sd = (selectedProgram as any).start_date;
-                const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
+            const sd = selectedProgram.start_date;
+            const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
             const isValid = currentWeek && currentWeek >= 1 && currentWeek <= selectedProgram.weeks;
             const isFinished = currentWeek && currentWeek > selectedProgram.weeks;
-              return (
-                <div className={`p-2.5 rounded-xl border text-center text-xs font-bold ${isFinished ? 'bg-muted/50 border-border text-muted-foreground' : isValid ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-muted/50 border-border text-muted-foreground'}`}>
-                  {isFinished ? '✅ Programa completado' : isValid ? `📍 Semana actual: ${currentWeek}` : sd ? 'Aún no ha comenzado' : 'Sin fecha de inicio'}
-                </div>
+            return (
+              <div className={`p-2.5 rounded-xl border text-center text-xs font-bold ${isFinished ? 'bg-muted/50 border-border text-muted-foreground' : isValid ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-muted/50 border-border text-muted-foreground'}`}>
+                {isFinished ? '✅ Programa completado' : isValid ? `📍 Semana actual: ${currentWeek}` : sd ? 'Aún no ha comenzado' : 'Sin fecha de inicio'}
+              </div>
             );
           })()}
 
           {(() => {
-            const sd = (selectedProgram as any).start_date;
+            const sd = selectedProgram.start_date;
             const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
             const progressValue = currentWeek && sd ? Math.min(100, (currentWeek / selectedProgram.weeks) * 100) : 0;
             return (
@@ -230,40 +280,70 @@ export default function Programs() {
           })()}
 
           <div className="space-y-1.5">
-            {programWeeks.map(pw => {
-              const isDeload = selectedProgram.deload_week === pw.week_number;
-              const routine = routines?.find(r => r.id === pw.routine_id);
-              const sd = (selectedProgram as any).start_date;
+            {dayGroups.map(([dayNumber, entries]) => {
+              const isDeload = selectedProgram.deload_week === dayNumber;
+              const sd = selectedProgram.start_date;
               const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
-              const isCurrent = currentWeek === pw.week_number;
+              const isCurrent = currentWeek === dayNumber;
               return (
-                <div key={pw.id} className={`p-3 rounded-xl border ${isCurrent ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/20' : isDeload ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-card border-border'}`}>
-                  <div className="flex items-center justify-between">
+                <div key={dayNumber} className={`p-3 rounded-xl border ${isCurrent ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/20' : isDeload ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-card border-border'}`}>
+                  <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold">
-                      Día {pw.week_number}
+                      Día {dayNumber}
                       {isCurrent && <span className="ml-2 text-[10px] text-primary font-semibold">← ACTUAL</span>}
                       {isDeload && <span className="ml-2 text-[10px] text-yellow-500 font-semibold">DELOAD</span>}
                     </span>
                   </div>
-                  <Select
-                    value={pw.routine_id ?? ''}
-                    onValueChange={v => assignRoutineMutation.mutate({ weekId: pw.id, routineId: v || null })}
+
+                  <div className="space-y-1.5">
+                    {entries.map((pw, idx) => {
+                      const routine = routines?.find(r => r.id === pw.routine_id);
+                      return (
+                        <div key={pw.id} className="flex items-center gap-1.5">
+                          <Select
+                            value={pw.routine_id ?? ''}
+                            onValueChange={v => assignRoutineMutation.mutate({ weekId: pw.id, routineId: v || null })}
+                          >
+                            <SelectTrigger className="h-8 text-xs rounded-lg bg-secondary/50 border-border flex-1">
+                              <SelectValue placeholder="Asignar rutina..." />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {routines?.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
+                            </SelectContent>
+                          </Select>
+                          {routine && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => navigate(`/routines/${routine.id}`)}
+                            >
+                              <ChevronRight className="h-3.5 w-3.5 text-primary" />
+                            </Button>
+                          )}
+                          {entries.length > 1 && (
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-7 w-7 shrink-0"
+                              onClick={() => removeRoutineEntryMutation.mutate({ weekId: pw.id, weekNumber: dayNumber })}
+                            >
+                              <Trash2 className="h-3 w-3 text-destructive" />
+                            </Button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="mt-1.5 w-full text-[10px] h-6 rounded-lg border-dashed border-border hover:border-primary/30"
+                    onClick={() => addRoutineToDayMutation.mutate(dayNumber)}
                   >
-                    <SelectTrigger className="mt-1.5 h-8 text-xs rounded-lg bg-secondary/50 border-border">
-                      <SelectValue placeholder="Asignar rutina..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {routines?.map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
-                  {routine && (
-                    <button
-                      onClick={() => navigate(`/routines/${routine.id}`)}
-                      className="text-[10px] text-primary mt-1 flex items-center gap-0.5 hover:underline"
-                    >
-                      Ver rutina <ChevronRight className="h-3 w-3" />
-                    </button>
-                  )}
+                    <Plus className="h-3 w-3 mr-1" />Añadir rutina
+                  </Button>
                 </div>
               );
             })}
@@ -360,7 +440,7 @@ export default function Programs() {
           </div>
 
           {programs && programs.length > 0 && (
-            <ProgramHistory programs={programs.map(p => ({ ...p, start_date: (p as any).start_date ?? null }))} />
+            <ProgramHistory programs={programs.map(p => ({ ...p, start_date: p.start_date ?? null }))} />
           )}
         </>
       )}

@@ -222,6 +222,7 @@ export type Database = {
         Row: {
           id: string
           notes: string | null
+          order_index: number
           program_id: string
           routine_id: string | null
           week_number: number
@@ -229,6 +230,7 @@ export type Database = {
         Insert: {
           id?: string
           notes?: string | null
+          order_index?: number
           program_id: string
           routine_id?: string | null
           week_number: number
@@ -236,6 +238,7 @@ export type Database = {
         Update: {
           id?: string
           notes?: string | null
+          order_index?: number
           program_id?: string
           routine_id?: string | null
           week_number?: number
