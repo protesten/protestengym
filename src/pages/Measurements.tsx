@@ -8,9 +8,8 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Ruler, Plus, Trash2, FileBarChart } from 'lucide-react';
+import { Ruler, Plus, FileBarChart } from 'lucide-react';
 import { toast } from 'sonner';
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { MeasurementChart } from '@/components/measurements/MeasurementChart';
 import { MeasurementCard } from '@/components/measurements/MeasurementCard';
@@ -23,6 +22,7 @@ export default function Measurements() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ upper: true, core: true, lower: true });
 
@@ -40,37 +40,54 @@ export default function Measurements() {
     },
   });
 
+  const buildRow = () => {
+    const row: any = { date: form.date || format(new Date(), 'yyyy-MM-dd') };
+    for (const f of ALL_FIELDS) {
+      if (form[f.key]?.trim()) row[f.key] = Number(form[f.key]);
+      else row[f.key] = null;
+    }
+    // Auto-calculate body fat if not manually entered
+    if (!form.body_fat_pct?.trim()) {
+      const heightCm = (profile as any)?.height_cm as number | null;
+      const sex = (profile as any)?.sex as string | null;
+      const neck = row.neck_cm;
+      const waist = row.waist_cm;
+      const hip = row.hip_cm;
+      if (heightCm && neck && waist) {
+        const estimated = estimateBodyFatNavy({ sex: sex || 'male', heightCm, neckCm: neck, waistCm: waist, hipCm: hip });
+        if (estimated !== null) row.body_fat_pct = estimated;
+      }
+    }
+    if (form.notes?.trim()) row.notes = form.notes;
+    else row.notes = null;
+    return row;
+  };
+
   const addMutation = useMutation({
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      const row: any = { user_id: user.id, date: form.date || format(new Date(), 'yyyy-MM-dd') };
-      for (const f of ALL_FIELDS) {
-        if (form[f.key]?.trim()) row[f.key] = Number(form[f.key]);
-      }
-      // Auto-calculate body fat if not manually entered
-      if (!form.body_fat_pct?.trim()) {
-        const heightCm = (profile as any)?.height_cm as number | null;
-        const sex = (profile as any)?.sex as string | null;
-        const neck = row.neck_cm;
-        const waist = row.waist_cm;
-        const hip = row.hip_cm;
-        if (heightCm && neck && waist) {
-          const estimated = estimateBodyFatNavy({ sex: sex || 'male', heightCm, neckCm: neck, waistCm: waist, hipCm: hip });
-          if (estimated !== null) {
-            row.body_fat_pct = estimated;
-          }
-        }
-      }
-      if (form.notes?.trim()) row.notes = form.notes;
+      const row = { ...buildRow(), user_id: user.id };
       const { error } = await supabase.from('body_measurements').insert(row);
       if (error) throw error;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['measurements'] });
-      setForm({});
-      setShowForm(false);
+      resetForm();
       toast.success('Medida registrada');
+    },
+  });
+
+  const updateMutation = useMutation({
+    mutationFn: async (id: string) => {
+      const row = buildRow();
+      const { error } = await supabase.from('body_measurements').update(row).eq('id', id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['measurements'] });
+      resetForm();
+      toast.success('Medida actualizada');
     },
   });
 
@@ -84,6 +101,32 @@ export default function Measurements() {
       toast.success('Medida eliminada');
     },
   });
+
+  const resetForm = () => {
+    setShowForm(false);
+    setEditingId(null);
+    setForm({});
+  };
+
+  const startEdit = (m: any) => {
+    const newForm: Record<string, string> = { date: m.date };
+    for (const f of ALL_FIELDS) {
+      if (m[f.key] != null) newForm[f.key] = String(m[f.key]);
+    }
+    if (m.notes) newForm.notes = m.notes;
+    setForm(newForm);
+    setEditingId(m.id);
+    setShowForm(true);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleSave = () => {
+    if (editingId) {
+      updateMutation.mutate(editingId);
+    } else {
+      addMutation.mutate();
+    }
+  };
 
   const toggleSection = (key: string) => setOpenSections(p => ({ ...p, [key]: !p[key] }));
 
@@ -105,9 +148,10 @@ export default function Measurements() {
       {/* Chart */}
       <MeasurementChart measurements={measurements} />
 
-      {/* Add form */}
+      {/* Add/Edit form */}
       {showForm ? (
         <div className="p-4 rounded-xl bg-card border border-border space-y-3 mb-4">
+          <p className="text-xs font-bold text-primary">{editingId ? '✏️ Editar medida' : '➕ Nueva medida'}</p>
           <div>
             <Label className="text-xs font-semibold text-muted-foreground">Fecha</Label>
             <Input
@@ -170,10 +214,10 @@ export default function Measurements() {
             />
           </div>
           <div className="flex gap-2">
-            <Button className="flex-1 rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => addMutation.mutate()}>
-              Guardar
+            <Button className="flex-1 rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={handleSave}>
+              {editingId ? 'Actualizar' : 'Guardar'}
             </Button>
-            <Button variant="ghost" onClick={() => { setShowForm(false); setForm({}); }}>
+            <Button variant="ghost" onClick={resetForm}>
               Cancelar
             </Button>
           </div>
@@ -187,7 +231,7 @@ export default function Measurements() {
       {/* History */}
       <div className="space-y-2">
         {(measurements ?? []).map(m => (
-          <MeasurementCard key={m.id} measurement={m} onDelete={(id) => deleteMutation.mutate(id)} />
+          <MeasurementCard key={m.id} measurement={m} onDelete={(id) => deleteMutation.mutate(id)} onEdit={startEdit} />
         ))}
         {(measurements ?? []).length === 0 && !showForm && (
           <p className="text-center text-muted-foreground text-sm py-8">Sin medidas aún. Registra tu primera medida.</p>
