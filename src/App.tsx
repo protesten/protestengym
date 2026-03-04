@@ -17,6 +17,7 @@ import Profile from "./pages/Profile";
 import Measurements from "./pages/Measurements";
 import Programs from "./pages/Programs";
 import MonthlyReport from "./pages/MonthlyReport";
+import MeasurementsReport from "./pages/MeasurementsReport";
 import SessionCalendar from "./pages/SessionCalendar";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
@@ -42,6 +43,7 @@ const App = () => (
             <Route path="/measurements" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Measurements /><BottomNav /></div></ProtectedRoute>} />
             <Route path="/programs" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Programs /><BottomNav /></div></ProtectedRoute>} />
             <Route path="/report" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><MonthlyReport /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/measurements-report" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><MeasurementsReport /><BottomNav /></div></ProtectedRoute>} />
             <Route path="/calendar" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><SessionCalendar /><BottomNav /></div></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Profile /><BottomNav /></div></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />

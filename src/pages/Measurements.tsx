@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { format } from 'date-fns';
@@ -6,7 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Ruler, Plus, Trash2 } from 'lucide-react';
+import { Ruler, Plus, Trash2, FileBarChart } from 'lucide-react';
 import { toast } from 'sonner';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
@@ -17,6 +18,7 @@ import { ChevronDown } from 'lucide-react';
 import { AnthropometricAnalysis } from '@/components/measurements/AnthropometricAnalysis';
 
 export default function Measurements() {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
@@ -69,10 +71,15 @@ export default function Measurements() {
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
-      <h1 className="text-xl font-black mb-4 flex items-center gap-2">
-        <Ruler className="h-5 w-5 text-primary" />
-        Medidas Corporales
-      </h1>
+      <div className="flex items-center justify-between mb-4">
+        <h1 className="text-xl font-black flex items-center gap-2">
+          <Ruler className="h-5 w-5 text-primary" />
+          Medidas Corporales
+        </h1>
+        <Button variant="ghost" size="sm" className="text-xs gap-1" onClick={() => navigate('/measurements-report')}>
+          <FileBarChart className="h-4 w-4" />Informe
+        </Button>
+      </div>
 
       {/* Anthropometric Analysis */}
       <AnthropometricAnalysis latestMeasurement={measurements?.[0] ?? null} />
