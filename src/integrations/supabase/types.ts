@@ -210,6 +210,7 @@ export type Database = {
           id: string
           is_active: boolean
           name: string
+          start_date: string | null
           user_id: string
           weeks: number
         }
@@ -219,6 +220,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name: string
+          start_date?: string | null
           user_id: string
           weeks?: number
         }
@@ -228,6 +230,7 @@ export type Database = {
           id?: string
           is_active?: boolean
           name?: string
+          start_date?: string | null
           user_id?: string
           weeks?: number
         }

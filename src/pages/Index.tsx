@@ -4,6 +4,7 @@ import { getProfile, getRoutines, getSessions } from '@/lib/api';
 import { getAllSessionSummaries, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
 import { StreakCard } from '@/components/StreakCard';
+import { TodayRoutineSuggestion } from '@/components/TodayRoutineSuggestion';
 import { Play, Zap, Calendar, TrendingUp, Dumbbell } from 'lucide-react';
 import { useState, useEffect } from 'react';
 
@@ -102,6 +103,9 @@ export default function Index() {
           ))}
         </div>
       </div>
+
+      {/* Today's Routine Suggestion */}
+      <TodayRoutineSuggestion />
 
       {/* Quick Start */}
       <Link to="/session/new">
