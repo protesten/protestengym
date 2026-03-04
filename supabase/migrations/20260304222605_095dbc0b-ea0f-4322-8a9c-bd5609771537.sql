@@ -1,0 +1,1 @@
+ALTER TABLE public.program_weeks DROP CONSTRAINT program_weeks_program_id_week_number_key;
