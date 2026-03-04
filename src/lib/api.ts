@@ -252,20 +252,51 @@ export async function deleteSet(id: string) {
 export type PreviousSessionData = { sets: WorkoutSet[]; date: string | null };
 
 export async function getPreviousSetsForExercise(exerciseId: string, currentSessionId: string): Promise<PreviousSessionData> {
-  // Find the most recent session_exercise for this exercise, excluding the current session
+  // Fetch all session_exercises for this exercise with their session date, excluding current
   const { data: ses, error: seErr } = await supabase
     .from('session_exercises')
     .select('id, session_id, sessions!inner(date)')
     .eq('exercise_id', exerciseId)
-    .neq('session_id', currentSessionId)
-    .order('sessions(date)', { ascending: false })
-    .limit(1);
+    .neq('session_id', currentSessionId);
   if (seErr || !ses?.length) return { sets: [], date: null };
-  const seId = ses[0].id;
-  const sessionDate = (ses[0] as any).sessions?.date ?? null;
+  // Sort client-side by session date descending
+  const sorted = ses.sort((a, b) => {
+    const dateA = (a as any).sessions?.date ?? '';
+    const dateB = (b as any).sessions?.date ?? '';
+    return dateB.localeCompare(dateA);
+  });
+  const latest = sorted[0];
+  const seId = latest.id;
+  const sessionDate = (latest as any).sessions?.date ?? null;
   const { data: sets, error } = await supabase.from('sets').select('*').eq('session_exercise_id', seId).order('created_at');
   if (error) return { sets: [], date: sessionDate };
   return { sets: sets ?? [], date: sessionDate };
+}
+
+// ============ Weight History (for suggestions) ============
+export async function getWeightHistoryForExercise(exerciseId: string, limit = 5): Promise<{ weight: number; reps: number; date: string }[]> {
+  const { data: ses, error: seErr } = await supabase
+    .from('session_exercises')
+    .select('id, sessions!inner(date)')
+    .eq('exercise_id', exerciseId);
+  if (seErr || !ses?.length) return [];
+  const sorted = ses.sort((a, b) => {
+    const dateA = (a as any).sessions?.date ?? '';
+    const dateB = (b as any).sessions?.date ?? '';
+    return dateB.localeCompare(dateA);
+  });
+  const recentSeIds = sorted.slice(0, limit).map(s => s.id);
+  const { data: sets } = await supabase
+    .from('sets')
+    .select('weight, reps, session_exercise_id')
+    .in('session_exercise_id', recentSeIds)
+    .eq('set_type', 'work')
+    .not('weight', 'is', null);
+  if (!sets?.length) return [];
+  const seIdToDate = new Map(sorted.map(s => [s.id, (s as any).sessions?.date ?? '']));
+  return sets
+    .filter(s => s.weight != null && s.reps != null)
+    .map(s => ({ weight: s.weight!, reps: s.reps!, date: seIdToDate.get(s.session_exercise_id) ?? '' }));
 }
 
 // ============ Profile ============
