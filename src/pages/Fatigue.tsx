@@ -14,6 +14,7 @@ import {
   fatigueColor,
   MUSCLE_RECOVERY,
   type SessionData,
+  type RecoveryCategory,
 } from '@/lib/fatigue-config';
 
 export default function Fatigue() {
@@ -21,6 +22,8 @@ export default function Fatigue() {
   const [loading, setLoading] = useState(true);
   const [fatigue, setFatigue] = useState<Map<number, number>>(new Map());
   const [muscleNames, setMuscleNames] = useState<Map<number, string>>(new Map());
+  const [recoveryMap, setRecoveryMap] = useState<Map<number, RecoveryCategory>>(new Map());
+  const [activeMuscleIds, setActiveMuscleIds] = useState<Set<number>>(new Set());
   const [sessionDataArr, setSessionDataArr] = useState<SessionData[]>([]);
   const [showDeload, setShowDeload] = useState(false);
 
@@ -30,10 +33,18 @@ export default function Fatigue() {
 
   async function loadFatigueData() {
     try {
-      const { data: muscles } = await supabase.from('muscles').select('id, name');
+      const { data: muscles } = await supabase.from('muscles').select('*');
       const nameMap = new Map<number, string>();
-      (muscles ?? []).forEach(m => nameMap.set(m.id, m.name));
+      const recMap = new Map<number, RecoveryCategory>();
+      const activeIds = new Set<number>();
+      (muscles ?? []).forEach((m: any) => {
+        nameMap.set(m.id, m.name);
+        if (m.recovery_category) recMap.set(m.id, m.recovery_category as RecoveryCategory);
+        if (m.is_active) activeIds.add(m.id);
+      });
       setMuscleNames(nameMap);
+      setRecoveryMap(recMap);
+      setActiveMuscleIds(activeIds);
 
       const fourteenDaysAgo = new Date();
       fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
@@ -109,7 +120,7 @@ export default function Fatigue() {
 
       const arr = Array.from(sessionDataMap.values());
       setSessionDataArr(arr);
-      const computed = computeFatigue(arr);
+      const computed = computeFatigue(arr, undefined, recMap);
       setFatigue(computed);
 
       if (computed.size > 0) {
@@ -172,13 +183,13 @@ export default function Fatigue() {
                   No hay datos de entrenamiento en los últimos 14 días.
                 </p>
               ) : (
-                <BodyHeatmap fatigue={fatigue} muscleNames={muscleNames} />
+                <BodyHeatmap fatigue={fatigue} muscleNames={muscleNames} activeMuscleIds={activeMuscleIds} />
               )}
             </CardContent>
           </Card>
 
           {/* Weekly Fatigue History Chart */}
-          <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} />
+          <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
 
           <Card>
             <CardHeader className="pb-2">
@@ -193,7 +204,7 @@ export default function Fatigue() {
               ) : (
                 <div className="space-y-3">
                   {criticalMuscles.map(([id, pct]) => {
-                    const hours = estimateRecoveryHours(pct, id);
+                    const hours = estimateRecoveryHours(pct, id, recoveryMap);
                     return (
                       <div key={id} className="space-y-1">
                         <div className="flex items-center justify-between">

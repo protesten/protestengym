@@ -4,6 +4,7 @@ import { fatigueColor } from '@/lib/fatigue-config';
 interface BodyHeatmapProps {
   fatigue: Map<number, number>;
   muscleNames: Map<number, string>;
+  activeMuscleIds?: Set<number>;
 }
 
 type MuscleRegion = {
@@ -306,7 +307,7 @@ const FRONT_SILHOUETTE = [
 
 const BACK_SILHOUETTE = FRONT_SILHOUETTE; // Same outline for back
 
-export function BodyHeatmap({ fatigue, muscleNames }: BodyHeatmapProps) {
+export function BodyHeatmap({ fatigue, muscleNames, activeMuscleIds }: BodyHeatmapProps) {
   const [tooltip, setTooltip] = useState<{ label: string; pct: number; x: number; y: number } | null>(null);
 
   const handleMouseEnter = useCallback((region: MuscleRegion, pct: number, e: React.MouseEvent<SVGPathElement>) => {
@@ -337,6 +338,7 @@ export function BodyHeatmap({ fatigue, muscleNames }: BodyHeatmapProps) {
   const renderRegions = (view: 'front' | 'back') => {
     return REGIONS
       .filter(r => r.view === view)
+      .filter(r => !activeMuscleIds || r.ids.some(id => activeMuscleIds.has(id)))
       .map((region, ri) => {
         const pct = getRegionFatigue(region.ids, fatigue);
         const color = fatigueColor(pct);
