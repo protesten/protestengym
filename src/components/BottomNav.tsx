@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X } from 'lucide-react';
+import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays } from 'lucide-react';
 
 const mainItems = [
   { to: '/', icon: Home, label: 'Inicio' },
@@ -12,6 +12,7 @@ const mainItems = [
 const moreItems = [
   { to: '/measurements', icon: Ruler, label: 'Medidas' },
   { to: '/programs', icon: Calendar, label: 'Programas' },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendario' },
   { to: '/report', icon: FileText, label: 'Informe' },
   { to: '/profile', icon: User, label: 'Perfil' },
 ];
