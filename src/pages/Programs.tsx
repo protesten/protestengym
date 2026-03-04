@@ -7,9 +7,14 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Calendar, Plus, Trash2, CheckCircle, ChevronRight } from 'lucide-react';
+import { Calendar, CalendarIcon, Plus, Trash2, CheckCircle, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
+import { format } from 'date-fns';
+import { es } from 'date-fns/locale';
+import { cn } from '@/lib/utils';
 
 interface Program {
   id: string;
@@ -36,6 +41,7 @@ export default function Programs() {
   const [name, setName] = useState('');
   const [weeks, setWeeks] = useState('4');
   const [deloadWeek, setDeloadWeek] = useState('');
+  const [startDate, setStartDate] = useState<Date>(new Date());
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
 
   const { data: programs } = useQuery({
@@ -67,7 +73,7 @@ export default function Programs() {
       const numWeeks = Math.max(1, Math.min(12, Number(weeks) || 4));
       const dl = deloadWeek ? Number(deloadWeek) : null;
       const { data: prog, error } = await supabase.from('programs')
-        .insert({ user_id: user.id, name, weeks: numWeeks, deload_week: dl })
+        .insert({ user_id: user.id, name, weeks: numWeeks, deload_week: dl, start_date: format(startDate, 'yyyy-MM-dd') } as any)
         .select().single();
       if (error) throw error;
       // Create week entries
@@ -213,6 +219,29 @@ export default function Programs() {
                   <Label className="text-xs font-semibold text-muted-foreground">Semana deload (opc.)</Label>
                   <Input inputMode="numeric" value={deloadWeek} onChange={e => setDeloadWeek(e.target.value)} placeholder="Ej: 4" className="rounded-lg bg-secondary/50 border-border" />
                 </div>
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground">Fecha de inicio</Label>
+                <Popover>
+                  <PopoverTrigger asChild>
+                    <Button
+                      variant="outline"
+                      className={cn("w-full justify-start text-left font-normal rounded-lg bg-secondary/50 border-border", !startDate && "text-muted-foreground")}
+                    >
+                      <CalendarIcon className="mr-2 h-4 w-4" />
+                      {startDate ? format(startDate, "PPP", { locale: es }) : <span>Seleccionar fecha</span>}
+                    </Button>
+                  </PopoverTrigger>
+                  <PopoverContent className="w-auto p-0" align="start">
+                    <CalendarComponent
+                      mode="single"
+                      selected={startDate}
+                      onSelect={(d) => d && setStartDate(d)}
+                      initialFocus
+                      className={cn("p-3 pointer-events-auto")}
+                    />
+                  </PopoverContent>
+                </Popover>
               </div>
               <div className="flex gap-2">
                 <Button className="flex-1 rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => createMutation.mutate()} disabled={!name.trim()}>
