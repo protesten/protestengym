@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
+import { getProfile } from '@/lib/api';
 import { format } from 'date-fns';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -16,6 +17,7 @@ import { MeasurementCard } from '@/components/measurements/MeasurementCard';
 import { FIELD_SECTIONS, ALL_FIELDS } from '@/components/measurements/fields';
 import { ChevronDown } from 'lucide-react';
 import { AnthropometricAnalysis } from '@/components/measurements/AnthropometricAnalysis';
+import { estimateBodyFatNavy } from '@/lib/body-fat';
 
 export default function Measurements() {
   const navigate = useNavigate();
@@ -23,6 +25,8 @@ export default function Measurements() {
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
   const [openSections, setOpenSections] = useState<Record<string, boolean>>({ upper: true, core: true, lower: true });
+
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
 
   const { data: measurements } = useQuery({
     queryKey: ['measurements'],
@@ -43,6 +47,20 @@ export default function Measurements() {
       const row: any = { user_id: user.id, date: form.date || format(new Date(), 'yyyy-MM-dd') };
       for (const f of ALL_FIELDS) {
         if (form[f.key]?.trim()) row[f.key] = Number(form[f.key]);
+      }
+      // Auto-calculate body fat if not manually entered
+      if (!form.body_fat_pct?.trim()) {
+        const heightCm = (profile as any)?.height_cm as number | null;
+        const sex = (profile as any)?.sex as string | null;
+        const neck = row.neck_cm;
+        const waist = row.waist_cm;
+        const hip = row.hip_cm;
+        if (heightCm && neck && waist) {
+          const estimated = estimateBodyFatNavy({ sex: sex || 'male', heightCm, neckCm: neck, waistCm: waist, hipCm: hip });
+          if (estimated !== null) {
+            row.body_fat_pct = estimated;
+          }
+        }
       }
       if (form.notes?.trim()) row.notes = form.notes;
       const { error } = await supabase.from('body_measurements').insert(row);
