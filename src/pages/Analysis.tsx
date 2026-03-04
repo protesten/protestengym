@@ -16,7 +16,8 @@ import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
 import { StreakCard } from '@/components/StreakCard';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
-import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock } from 'lucide-react';
+import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock, Ruler } from 'lucide-react';
+import { BodyEvolutionPanel } from '@/components/BodyEvolutionPanel';
 
 function ArrowBadge({ c }: { c: Comparison }) {
   const cls = c.arrow === '↑' ? 'arrow-up' : c.arrow === '↓' ? 'arrow-down' : 'arrow-equal';
@@ -108,8 +109,9 @@ export default function Analysis() {
           <TabsTrigger value="volume" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Volumen</TabsTrigger>
           <TabsTrigger value="1rm" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>
           <TabsTrigger value="prs" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>
+          <TabsTrigger value="body" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Cuerpo</TabsTrigger>
           <TabsTrigger value="streak" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Racha</TabsTrigger>
-          <TabsTrigger value="summary" className="col-span-2 text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
+          <TabsTrigger value="summary" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
         </TabsList>
 
         <TabsContent value="exercise" className="space-y-4 mt-4">
@@ -237,6 +239,10 @@ export default function Analysis() {
               ))}
             </div>
           )}
+        </TabsContent>
+
+        <TabsContent value="body" className="mt-4">
+          <BodyEvolutionPanel dateRange={dateRange} />
         </TabsContent>
 
         <TabsContent value="streak" className="mt-4">
