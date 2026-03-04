@@ -6,6 +6,12 @@ import { es } from 'date-fns/locale';
 type TrackingType = 'weight_reps' | 'reps_only' | 'time_only' | 'distance_time';
 type WorkoutSet = Tables<'sets'>;
 
+/** Optional date range filter for analysis functions */
+export interface DateRange {
+  from: string; // yyyy-MM-dd
+  to: string;   // yyyy-MM-dd
+}
+
 // Unified exercise shape for calculations
 interface CalcExercise {
   id: string;
@@ -26,7 +32,6 @@ async function getAllExercisesForCalc(): Promise<CalcExercise[]> {
     result.push({ id: e.id, name: e.name, tracking_type: e.tracking_type as TrackingType, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids });
   }
   for (const e of (predefined ?? [])) {
-    // Avoid duplicates by id (shouldn't happen but safety)
     if (!result.find(r => r.id === e.id)) {
       result.push({ id: e.id, name: e.name, tracking_type: e.tracking_type as TrackingType, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids });
     }
@@ -41,6 +46,16 @@ async function findExercise(exerciseId: string): Promise<CalcExercise | null> {
   const { data: predefined } = await supabase.from('predefined_exercises').select('*').eq('id', exerciseId).maybeSingle();
   if (predefined) return { id: predefined.id, name: predefined.name, tracking_type: predefined.tracking_type as TrackingType, primary_muscle_ids: predefined.primary_muscle_ids, secondary_muscle_ids: predefined.secondary_muscle_ids };
   return null;
+}
+
+/** Helper: get sessions optionally filtered by date range */
+async function getSessionsInRange(range?: DateRange) {
+  let q = supabase.from('sessions').select('*').order('date', { ascending: false });
+  if (range) {
+    q = q.gte('date', range.from).lte('date', range.to);
+  }
+  const { data } = await q;
+  return data ?? [];
 }
 
 export function setWorkMetric(set: WorkoutSet, trackingType: TrackingType): number {
@@ -81,9 +96,23 @@ async function exerciseMetricInRange(exerciseId: string, from: string, to: strin
   return sets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
 }
 
-export async function getExerciseComparisons(exerciseId: string, trackingType: TrackingType) {
-  const today = format(new Date(), 'yyyy-MM-dd');
+export async function getExerciseComparisons(exerciseId: string, trackingType: TrackingType, range?: DateRange) {
+  if (range) {
+    // With custom range: compare selected range vs same-length period before it
+    const fromDate = new Date(range.from);
+    const toDate = new Date(range.to);
+    const days = Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+    const prevTo = format(subDays(fromDate, 1), 'yyyy-MM-dd');
+    const prevFrom = format(subDays(fromDate, days + 1), 'yyyy-MM-dd');
+    
+    const curr = await exerciseMetricInRange(exerciseId, range.from, range.to, trackingType);
+    const prev = await exerciseMetricInRange(exerciseId, prevFrom, prevTo, trackingType);
+    const comparison = makeComparison(curr, prev);
+    
+    return { lastSession: null as Comparison | null, week: comparison, month: null as Comparison | null };
+  }
 
+  const today = format(new Date(), 'yyyy-MM-dd');
   const d7from = format(subDays(new Date(), 6), 'yyyy-MM-dd');
   const d7prevFrom = format(subDays(new Date(), 13), 'yyyy-MM-dd');
   const d7prevTo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
@@ -108,18 +137,28 @@ export interface MuscleVolume {
   isometric: Comparison;
 }
 
-export async function getMuscleComparisons(period: '7d' | 'month'): Promise<MuscleVolume[]> {
-  const today = format(new Date(), 'yyyy-MM-dd');
-  let currFrom: string, prevFrom: string, prevTo: string;
+export async function getMuscleComparisons(period: '7d' | 'month', range?: DateRange): Promise<MuscleVolume[]> {
+  let currFrom: string, currTo: string, prevFrom: string, prevTo: string;
 
-  if (period === '7d') {
-    currFrom = format(subDays(new Date(), 6), 'yyyy-MM-dd');
-    prevFrom = format(subDays(new Date(), 13), 'yyyy-MM-dd');
-    prevTo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+  if (range) {
+    currFrom = range.from;
+    currTo = range.to;
+    const fromDate = new Date(range.from);
+    const days = Math.round((new Date(range.to).getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
+    prevTo = format(subDays(fromDate, 1), 'yyyy-MM-dd');
+    prevFrom = format(subDays(fromDate, days + 1), 'yyyy-MM-dd');
   } else {
-    currFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd');
-    prevFrom = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
-    prevTo = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
+    const today = format(new Date(), 'yyyy-MM-dd');
+    currTo = today;
+    if (period === '7d') {
+      currFrom = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+      prevFrom = format(subDays(new Date(), 13), 'yyyy-MM-dd');
+      prevTo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+    } else {
+      currFrom = format(startOfMonth(new Date()), 'yyyy-MM-dd');
+      prevFrom = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
+      prevTo = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
+    }
   }
 
   const { data: muscles } = await supabase.from('muscles').select('*').order('id');
@@ -138,7 +177,7 @@ export async function getMuscleComparisons(period: '7d' | 'month'): Promise<Musc
       if (!isPrimary && !isSecondary) continue;
 
       const factor = isPrimary ? 1 : 0.5;
-      const currVal = await exerciseMetricInRange(ex.id, currFrom, today, ex.tracking_type);
+      const currVal = await exerciseMetricInRange(ex.id, currFrom, currTo, ex.tracking_type);
       const prevVal = await exerciseMetricInRange(ex.id, prevFrom, prevTo, ex.tracking_type);
 
       if (ex.tracking_type === 'time_only') {
@@ -239,9 +278,9 @@ export interface ExerciseHistoryEntry {
   totalMetric: number;
 }
 
-export async function getExerciseHistory(exerciseId: string, trackingType: TrackingType): Promise<ExerciseHistoryEntry[]> {
-  const { data: sessions } = await supabase.from('sessions').select('*').order('date', { ascending: false });
-  if (!sessions) return [];
+export async function getExerciseHistory(exerciseId: string, trackingType: TrackingType, range?: DateRange): Promise<ExerciseHistoryEntry[]> {
+  const sessions = await getSessionsInRange(range);
+  if (!sessions.length) return [];
   const results: ExerciseHistoryEntry[] = [];
 
   for (const session of sessions) {
@@ -284,10 +323,11 @@ export interface PersonalRecord {
   records: { label: string; value: number; unit: string; date: string }[];
 }
 
-export async function getPersonalRecords(): Promise<PersonalRecord[]> {
+export async function getPersonalRecords(range?: DateRange): Promise<PersonalRecord[]> {
   const exercises = await getAllExercisesForCalc();
-  const { data: allSessions } = await supabase.from('sessions').select('*');
-  if (!exercises.length || !allSessions) return [];
+  const allSessions = await getSessionsInRange(range);
+  if (!exercises.length || !allSessions.length) return [];
+  const sessionIds = new Set(allSessions.map(s => s.id));
   const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
   const results: PersonalRecord[] = [];
 
@@ -297,6 +337,7 @@ export async function getPersonalRecords(): Promise<PersonalRecord[]> {
 
     const allSets: { set: WorkoutSet; date: string }[] = [];
     for (const se of sesExs) {
+      if (!sessionIds.has(se.session_id)) continue;
       const date = sessionDateMap.get(se.session_id) ?? '';
       const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
       (sets ?? []).filter(s => s.set_type === 'work').forEach(s => allSets.push({ set: s, date }));
@@ -378,7 +419,40 @@ export interface PeriodSummary {
   avgRPE: number | null;
 }
 
-export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise<PeriodSummary[]> {
+export async function getPeriodSummaries(granularity: 'week' | 'month', range?: DateRange): Promise<PeriodSummary[]> {
+  // If a custom range is provided, build a single-period summary for it
+  if (range) {
+    const { data: sessions } = await supabase.from('sessions').select('*').gte('date', range.from).lte('date', range.to);
+    let strengthTotal = 0, isometricTotal = 0, cardioTime = 0;
+    let exerciseCount = 0, totalWorkSets = 0;
+    let rpeSum = 0, rpeCount = 0;
+
+    if (sessions) {
+      for (const session of sessions) {
+        const summary = await getSessionSummary(session.id);
+        strengthTotal += summary.strengthTotal;
+        isometricTotal += summary.isometricTotal;
+        cardioTime += summary.cardioTime;
+        exerciseCount += summary.exerciseCount;
+        totalWorkSets += summary.totalWorkSets;
+        if (summary.avgRPE != null) { rpeSum += summary.avgRPE; rpeCount++; }
+      }
+    }
+
+    return [{
+      label: `${range.from} → ${range.to}`,
+      from: range.from,
+      to: range.to,
+      sessionCount: sessions?.length ?? 0,
+      strengthTotal,
+      isometricTotal,
+      cardioTime,
+      exerciseCount,
+      totalWorkSets,
+      avgRPE: rpeCount > 0 ? Math.round(rpeSum / rpeCount * 10) / 10 : null,
+    }];
+  }
+
   const now = new Date();
   const periods: { label: string; from: string; to: string }[] = [];
 
@@ -449,13 +523,20 @@ export interface WeeklyMuscleSets {
   workingSets: number;
 }
 
-export async function getWeeklyMuscleSets(weeksBack: number = 0): Promise<WeeklyMuscleSets[]> {
-  const now = new Date();
-  const targetWeek = subWeeks(now, weeksBack);
-  const weekStart = startOfWeek(targetWeek, { weekStartsOn: 1 });
-  const weekEnd = weeksBack === 0 ? now : endOfWeek(targetWeek, { weekStartsOn: 1 });
-  const from = format(weekStart, 'yyyy-MM-dd');
-  const to = format(weekEnd, 'yyyy-MM-dd');
+export async function getWeeklyMuscleSets(weeksBack: number = 0, range?: DateRange): Promise<WeeklyMuscleSets[]> {
+  let from: string, to: string;
+
+  if (range) {
+    from = range.from;
+    to = range.to;
+  } else {
+    const now = new Date();
+    const targetWeek = subWeeks(now, weeksBack);
+    const weekStart = startOfWeek(targetWeek, { weekStartsOn: 1 });
+    const weekEnd = weeksBack === 0 ? now : endOfWeek(targetWeek, { weekStartsOn: 1 });
+    from = format(weekStart, 'yyyy-MM-dd');
+    to = format(weekEnd, 'yyyy-MM-dd');
+  }
 
   const { data: muscles } = await supabase.from('muscles').select('*').order('id');
   const exercises = await getAllExercisesForCalc();
@@ -510,10 +591,11 @@ export function calculate1RM(weight: number, reps: number): number {
   return Math.round(weight * (1 + reps / 30) * 10) / 10;
 }
 
-export async function getAll1RMs(): Promise<ExerciseRM[]> {
+export async function getAll1RMs(range?: DateRange): Promise<ExerciseRM[]> {
   const exercises = await getAllExercisesForCalc();
-  const { data: allSessions } = await supabase.from('sessions').select('*');
-  if (!exercises.length || !allSessions) return [];
+  const allSessions = await getSessionsInRange(range);
+  if (!exercises.length || !allSessions.length) return [];
+  const sessionIds = new Set(allSessions.map(s => s.id));
   const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
   const results: ExerciseRM[] = [];
 
@@ -526,6 +608,7 @@ export async function getAll1RMs(): Promise<ExerciseRM[]> {
     let bestWeight = 0, bestReps = 0, bestDate = '';
 
     for (const se of sesExs) {
+      if (!sessionIds.has(se.session_id)) continue;
       const date = sessionDateMap.get(se.session_id) ?? '';
       const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
       for (const s of (sets ?? []).filter(s => s.set_type === 'work')) {
@@ -551,8 +634,12 @@ export interface RM1History {
   estimated1RM: number;
 }
 
-export async function get1RMHistory(exerciseId: string): Promise<RM1History[]> {
-  const { data: allSessions } = await supabase.from('sessions').select('*').order('date', { ascending: true });
+export async function get1RMHistory(exerciseId: string, range?: DateRange): Promise<RM1History[]> {
+  let q = supabase.from('sessions').select('*').order('date', { ascending: true });
+  if (range) {
+    q = q.gte('date', range.from).lte('date', range.to);
+  }
+  const { data: allSessions } = await q;
   if (!allSessions) return [];
 
   const results: RM1History[] = [];
