@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { getProfile, updateProfile } from '@/lib/api';
+import { supabase } from '@/integrations/supabase/client';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,17 +17,34 @@ export default function Profile() {
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const [displayName, setDisplayName] = useState('');
   const [units, setUnits] = useState('kg');
+  const [heightCm, setHeightCm] = useState('');
+  const [birthDate, setBirthDate] = useState('');
 
   useEffect(() => {
     if (profile) {
       setDisplayName(profile.display_name ?? '');
       const prefs = profile.preferences as any;
       setUnits(prefs?.units ?? 'kg');
+      setHeightCm((profile as any).height_cm?.toString() ?? '');
+      setBirthDate((profile as any).birth_date ?? '');
     }
   }, [profile]);
 
   const saveMutation = useMutation({
-    mutationFn: () => updateProfile({ display_name: displayName, preferences: { units } }),
+    mutationFn: async () => {
+      const { data: { user: u } } = await supabase.auth.getUser();
+      if (!u) throw new Error('Not authenticated');
+      const updateData: any = {
+        display_name: displayName,
+        preferences: { units },
+      };
+      if (heightCm.trim()) updateData.height_cm = Number(heightCm);
+      else updateData.height_cm = null;
+      if (birthDate.trim()) updateData.birth_date = birthDate;
+      else updateData.birth_date = null;
+      const { error } = await supabase.from('profiles').update(updateData).eq('user_id', u.id);
+      if (error) throw error;
+    },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['profile'] }); toast.success('Perfil actualizado'); },
   });
 
@@ -54,6 +72,16 @@ export default function Profile() {
         <div>
           <Label className="text-xs font-semibold text-muted-foreground">Nombre</Label>
           <Input value={displayName} onChange={e => setDisplayName(e.target.value)} className="rounded-lg bg-card border-border" />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground">Altura (cm)</Label>
+            <Input inputMode="decimal" placeholder="175" value={heightCm} onChange={e => setHeightCm(e.target.value)} className="rounded-lg bg-card border-border" />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground">Fecha de nacimiento</Label>
+            <Input type="date" value={birthDate} onChange={e => setBirthDate(e.target.value)} className="rounded-lg bg-card border-border" />
+          </div>
         </div>
         <div>
           <Label className="text-xs font-semibold text-muted-foreground">Unidades de peso</Label>
