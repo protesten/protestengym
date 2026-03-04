@@ -1,47 +1,67 @@
 
 
-## Problem
+## Muscle Fatigue Engine & Body Heatmap
 
-Two performance issues:
+This feature adds a new "Fatiga" page with three components: a body heatmap showing per-muscle fatigue levels, a critical muscles dashboard, and a deload recommender.
 
-1. **Set updates are synchronous-blocking**: Every field change (weight, reps, RPE) on blur triggers `updateSetApi` which hits the database, then checks for PR, then invalidates all queries. The UI freezes while waiting.
+### Architecture
 
-2. **Analysis loading feels stuck**: All calculation functions make multiple sequential Supabase queries with no loading indicators, giving the impression the app is frozen.
+All logic is client-side, computed from existing session/set data in the database. No schema changes needed.
 
-## Plan
+### Files to create/modify
 
-### 1. Optimistic updates for set mutations (`src/pages/SessionDetail.tsx`)
+**1. `src/lib/fatigue-config.ts`** (new)
+- Recovery rate map: each of the 49 muscles mapped to a recovery category (fast=50%/24h, medium=33%/24h, slow=25%/24h)
+- Color thresholds: green <30%, yellow 30-60%, orange 60-85%, red >85%
+- Fatigue calculation function: given sessions+sets+exercises from the last ~14 days, compute current fatigue per muscle
+  - For each session: compute W = sets x reps x weight per exercise (normalized so intense session = ~40-50% fatigue)
+  - Primary muscles get 100% of W, secondary get 50%
+  - Apply time-decay based on hours elapsed since session using the muscle's recovery rate
+  - Cap at 100%, sum across sessions
 
-Add `onMutate` to `updateSetMutation` that immediately updates the local `allSets` query cache before the server responds. Add `onError` rollback. This makes every weight/reps/RPE change feel instant.
+**2. `src/pages/Fatigue.tsx`** (new)
+- Main page with three sections:
+  - **Body Heatmap**: SVG-based front/back human body diagram with muscles as colored regions (green/yellow/orange/red based on fatigue %)
+  - **Critical Muscles Dashboard**: Filtered list of muscles at orange/red level, showing name, fatigue %, and estimated recovery time
+  - **Deload Recommender**: If average body fatigue >70% for 3+ consecutive days, show a banner suggesting a deload week
+- Uses existing `getSessions`, `getSessionExercises`, `getSets` APIs to fetch recent training data
+- Computes fatigue on mount using the engine from fatigue-config.ts
 
-- Snapshot `allSets` in `onMutate`
-- Optimistically merge the changed fields into the cached set
-- On error, rollback to snapshot
-- Move PR check to `onSuccess` instead of `mutationFn` so it doesn't block the save
+**3. `src/components/BodyHeatmap.tsx`** (new)
+- SVG component with simplified front+back human silhouette
+- Each muscle group region is a `<path>` element colored based on its fatigue level
+- Tooltip on tap/hover showing muscle name and exact fatigue %
+- Responsive, works on mobile
 
-Also add optimistic updates to `addSetMutation` and `deleteSetMutation` for instant feedback.
+**4. `src/App.tsx`** (modify)
+- Add route `/fatigue` pointing to the new Fatigue page
 
-### 2. Debounce rapid field changes (`src/pages/SessionDetail.tsx`)
+**5. `src/components/BottomNav.tsx`** (modify)
+- Add "Fatiga" entry to the `moreItems` array with a Flame or Activity icon
 
-The `NumericInput` fires `onSave` on every blur. If a user tabs through fields quickly, this triggers many mutations. Add a small debounce (300ms) or batch updates to reduce redundant API calls.
+### Fatigue Algorithm Detail
 
-### 3. Add loading skeletons to Analysis tabs (`src/pages/Analysis.tsx`)
+```text
+For each muscle M:
+  fatigue(M) = 0
+  For each session S in last 14 days:
+    hoursAgo = (now - S.date) / 3600000
+    For each exercise E in S:
+      if M in E.primary_muscles or M in E.secondary_muscles:
+        W = totalSets * avgReps * avgWeight (for work sets only)
+        W_normalized = min(W / referenceMax, 1.0) * 50  // cap contribution ~50%
+        multiplier = M in primary ? 1.0 : 0.5
+        decayRate = recoveryRate[M]  // 0.50, 0.33, or 0.25 per 24h
+        remaining = W_normalized * multiplier * (1 - decayRate)^(hoursAgo/24)
+        fatigue(M) += remaining
+  fatigue(M) = min(fatigue(M), 100)
+```
 
-Currently tabs show nothing while data loads. Add `Skeleton` placeholders during loading states for:
-- Exercise history list
-- Muscle volume table
-- PRs cards
-- Summary period cards
-- Body evolution charts
+### Deload Logic
 
-Use existing `Skeleton` component from `src/components/ui/skeleton.tsx`.
+Track average fatigue across all trained muscles over last 7 days. If it exceeds 70% on 3+ days, display a prominent deload suggestion card.
 
-### 4. Add loading states to calculation hooks (`src/pages/Analysis.tsx`)
+### Visual Design
 
-The current pattern uses `useEffect` + `setState` for analysis data (muscle, PRs, periods). These have no loading indicator. Add `isLoading` state variables and show skeletons while data is being fetched.
-
-### Files to modify:
-- **`src/pages/SessionDetail.tsx`**: Optimistic updates on set mutations, debounce inputs
-- **`src/pages/Analysis.tsx`**: Loading states + skeleton placeholders for all tabs
-- **`src/components/AnalysisExtras.tsx`**: Loading skeletons for Volume and 1RM panels
+Follows existing app patterns: dark theme, rounded cards, `bg-card border-border` styling, uses existing Skeleton for loading states. The heatmap uses an inline SVG with anatomically grouped paths for major muscle regions.
 
