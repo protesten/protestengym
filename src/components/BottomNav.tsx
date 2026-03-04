@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut } from 'lucide-react';
+import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut, Flame } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 
 const mainItems = [
@@ -11,6 +11,7 @@ const mainItems = [
 ];
 
 const moreItems = [
+  { to: '/fatigue', icon: Flame, label: 'Fatiga' },
   { to: '/measurements', icon: Ruler, label: 'Medidas' },
   { to: '/programs', icon: Calendar, label: 'Programas' },
   { to: '/calendar', icon: CalendarDays, label: 'Calendario' },
