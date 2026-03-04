@@ -212,7 +212,7 @@ export async function getSetsBySession(sessionId: string) {
   const { data: ses } = await supabase.from('session_exercises').select('id').eq('session_id', sessionId);
   if (!ses?.length) return [];
   const seIds = ses.map(se => se.id);
-  const { data, error } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
+  const { data, error } = await supabase.from('sets').select('*').in('session_exercise_id', seIds).order('created_at');
   if (error) throw error;
   return data ?? [];
 }
