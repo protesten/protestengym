@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
+import { differenceInDays } from 'date-fns';
 import { useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
@@ -199,15 +200,31 @@ export default function Programs() {
             </Popover>
           </div>
 
+          {(() => {
+            const sd = (selectedProgram as any).start_date;
+            const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
+            const isValid = currentWeek && currentWeek >= 1 && currentWeek <= selectedProgram.weeks;
+            const isFinished = currentWeek && currentWeek > selectedProgram.weeks;
+            return (
+              <div className={`p-2.5 rounded-xl border text-center text-xs font-bold ${isFinished ? 'bg-muted/50 border-border text-muted-foreground' : isValid ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-muted/50 border-border text-muted-foreground'}`}>
+                {isFinished ? '✅ Programa completado' : isValid ? `📍 Semana actual: ${currentWeek} de ${selectedProgram.weeks}` : sd ? 'Aún no ha comenzado' : 'Sin fecha de inicio'}
+              </div>
+            );
+          })()}
+
           <div className="space-y-1.5">
             {programWeeks.map(pw => {
               const isDeload = selectedProgram.deload_week === pw.week_number;
               const routine = routines?.find(r => r.id === pw.routine_id);
+              const sd = (selectedProgram as any).start_date;
+              const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
+              const isCurrent = currentWeek === pw.week_number;
               return (
-                <div key={pw.id} className={`p-3 rounded-xl border ${isDeload ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-card border-border'}`}>
+                <div key={pw.id} className={`p-3 rounded-xl border ${isCurrent ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/20' : isDeload ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-card border-border'}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold">
                       Semana {pw.week_number}
+                      {isCurrent && <span className="ml-2 text-[10px] text-primary font-semibold">← ACTUAL</span>}
                       {isDeload && <span className="ml-2 text-[10px] text-yellow-500 font-semibold">DELOAD</span>}
                     </span>
                   </div>
