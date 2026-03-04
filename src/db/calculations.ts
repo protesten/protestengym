@@ -5,7 +5,43 @@ import { es } from 'date-fns/locale';
 
 type TrackingType = 'weight_reps' | 'reps_only' | 'time_only' | 'distance_time';
 type WorkoutSet = Tables<'sets'>;
-type Exercise = Tables<'exercises'>;
+
+// Unified exercise shape for calculations
+interface CalcExercise {
+  id: string;
+  name: string;
+  tracking_type: TrackingType;
+  primary_muscle_ids: number[] | null;
+  secondary_muscle_ids: number[] | null;
+}
+
+/** Fetch and merge both personal + predefined exercises */
+async function getAllExercisesForCalc(): Promise<CalcExercise[]> {
+  const [{ data: personal }, { data: predefined }] = await Promise.all([
+    supabase.from('exercises').select('*'),
+    supabase.from('predefined_exercises').select('*'),
+  ]);
+  const result: CalcExercise[] = [];
+  for (const e of (personal ?? [])) {
+    result.push({ id: e.id, name: e.name, tracking_type: e.tracking_type as TrackingType, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids });
+  }
+  for (const e of (predefined ?? [])) {
+    // Avoid duplicates by id (shouldn't happen but safety)
+    if (!result.find(r => r.id === e.id)) {
+      result.push({ id: e.id, name: e.name, tracking_type: e.tracking_type as TrackingType, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids });
+    }
+  }
+  return result;
+}
+
+/** Look up a single exercise in both tables */
+async function findExercise(exerciseId: string): Promise<CalcExercise | null> {
+  const { data: personal } = await supabase.from('exercises').select('*').eq('id', exerciseId).maybeSingle();
+  if (personal) return { id: personal.id, name: personal.name, tracking_type: personal.tracking_type as TrackingType, primary_muscle_ids: personal.primary_muscle_ids, secondary_muscle_ids: personal.secondary_muscle_ids };
+  const { data: predefined } = await supabase.from('predefined_exercises').select('*').eq('id', exerciseId).maybeSingle();
+  if (predefined) return { id: predefined.id, name: predefined.name, tracking_type: predefined.tracking_type as TrackingType, primary_muscle_ids: predefined.primary_muscle_ids, secondary_muscle_ids: predefined.secondary_muscle_ids };
+  return null;
+}
 
 export function setWorkMetric(set: WorkoutSet, trackingType: TrackingType): number {
   if (set.set_type !== 'work') return 0;
@@ -48,7 +84,6 @@ async function exerciseMetricInRange(exerciseId: string, from: string, to: strin
 export async function getExerciseComparisons(exerciseId: string, trackingType: TrackingType) {
   const today = format(new Date(), 'yyyy-MM-dd');
 
-  // 7 days
   const d7from = format(subDays(new Date(), 6), 'yyyy-MM-dd');
   const d7prevFrom = format(subDays(new Date(), 13), 'yyyy-MM-dd');
   const d7prevTo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
@@ -56,7 +91,6 @@ export async function getExerciseComparisons(exerciseId: string, trackingType: T
   const prev7 = await exerciseMetricInRange(exerciseId, d7prevFrom, d7prevTo, trackingType);
   const week = makeComparison(curr7, prev7);
 
-  // Month
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const prevMonthStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
   const prevMonthEnd = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
@@ -89,8 +123,8 @@ export async function getMuscleComparisons(period: '7d' | 'month'): Promise<Musc
   }
 
   const { data: muscles } = await supabase.from('muscles').select('*').order('id');
-  const { data: exercises } = await supabase.from('exercises').select('*');
-  if (!muscles || !exercises) return [];
+  const exercises = await getAllExercisesForCalc();
+  if (!muscles || !exercises.length) return [];
 
   const result: MuscleVolume[] = [];
 
@@ -136,6 +170,9 @@ export interface SessionSummary {
   isometricTotal: number;
   cardioTime: number;
   cardioDistance: number;
+  exerciseCount: number;
+  totalWorkSets: number;
+  avgRPE: number | null;
 }
 
 export async function getSessionSummary(sessionId: string): Promise<SessionSummary> {
@@ -143,13 +180,20 @@ export async function getSessionSummary(sessionId: string): Promise<SessionSumma
   const { data: sesExercises } = await supabase.from('session_exercises').select('*').eq('session_id', sessionId);
   
   let strengthTotal = 0, isometricTotal = 0, cardioTime = 0, cardioDistance = 0;
+  let totalWorkSets = 0;
+  let rpeSum = 0, rpeCount = 0;
 
   if (sesExercises) {
     for (const se of sesExercises) {
-      const { data: exercise } = await supabase.from('exercises').select('*').eq('id', se.exercise_id).single();
+      const exercise = await findExercise(se.exercise_id);
       if (!exercise) continue;
       const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
       const workSets = (sets ?? []).filter(s => s.set_type === 'work');
+      totalWorkSets += workSets.length;
+
+      for (const s of workSets) {
+        if (s.rpe != null) { rpeSum += Number(s.rpe); rpeCount++; }
+      }
 
       switch (exercise.tracking_type) {
         case 'weight_reps':
@@ -169,7 +213,17 @@ export async function getSessionSummary(sessionId: string): Promise<SessionSumma
     }
   }
 
-  return { sessionId, date: session?.date ?? '', strengthTotal, isometricTotal, cardioTime, cardioDistance };
+  return {
+    sessionId,
+    date: session?.date ?? '',
+    strengthTotal,
+    isometricTotal,
+    cardioTime,
+    cardioDistance,
+    exerciseCount: sesExercises?.length ?? 0,
+    totalWorkSets,
+    avgRPE: rpeCount > 0 ? Math.round(rpeSum / rpeCount * 10) / 10 : null,
+  };
 }
 
 export async function getAllSessionSummaries(): Promise<SessionSummary[]> {
@@ -231,9 +285,9 @@ export interface PersonalRecord {
 }
 
 export async function getPersonalRecords(): Promise<PersonalRecord[]> {
-  const { data: exercises } = await supabase.from('exercises').select('*');
+  const exercises = await getAllExercisesForCalc();
   const { data: allSessions } = await supabase.from('sessions').select('*');
-  if (!exercises || !allSessions) return [];
+  if (!exercises.length || !allSessions) return [];
   const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
   const results: PersonalRecord[] = [];
 
@@ -255,14 +309,19 @@ export async function getPersonalRecords(): Promise<PersonalRecord[]> {
       case 'weight_reps': {
         let maxWeight = { value: 0, date: '' };
         let maxVolume = { value: 0, date: '' };
+        let max1RM = { value: 0, date: '' };
         for (const { set, date } of allSets) {
           const w = set.weight ?? 0;
-          const vol = w * (set.reps ?? 0);
+          const r = set.reps ?? 0;
+          const vol = w * r;
+          const rm = calculate1RM(w, r);
           if (w > maxWeight.value) maxWeight = { value: w, date };
           if (vol > maxVolume.value) maxVolume = { value: vol, date };
+          if (rm > max1RM.value) max1RM = { value: rm, date };
         }
         if (maxWeight.value > 0) records.push({ label: 'Peso máx', value: maxWeight.value, unit: 'kg', date: maxWeight.date });
         if (maxVolume.value > 0) records.push({ label: 'Vol. máx serie', value: maxVolume.value, unit: 'kg', date: maxVolume.date });
+        if (max1RM.value > 0) records.push({ label: '1RM estimado', value: max1RM.value, unit: 'kg', date: max1RM.date });
         break;
       }
       case 'reps_only': {
@@ -314,6 +373,9 @@ export interface PeriodSummary {
   strengthTotal: number;
   isometricTotal: number;
   cardioTime: number;
+  exerciseCount: number;
+  totalWorkSets: number;
+  avgRPE: number | null;
 }
 
 export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise<PeriodSummary[]> {
@@ -348,6 +410,8 @@ export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise
   for (const period of periods) {
     const { data: sessions } = await supabase.from('sessions').select('*').gte('date', period.from).lte('date', period.to);
     let strengthTotal = 0, isometricTotal = 0, cardioTime = 0;
+    let exerciseCount = 0, totalWorkSets = 0;
+    let rpeSum = 0, rpeCount = 0;
 
     if (sessions) {
       for (const session of sessions) {
@@ -355,6 +419,9 @@ export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise
         strengthTotal += summary.strengthTotal;
         isometricTotal += summary.isometricTotal;
         cardioTime += summary.cardioTime;
+        exerciseCount += summary.exerciseCount;
+        totalWorkSets += summary.totalWorkSets;
+        if (summary.avgRPE != null) { rpeSum += summary.avgRPE; rpeCount++; }
       }
     }
 
@@ -366,6 +433,9 @@ export async function getPeriodSummaries(granularity: 'week' | 'month'): Promise
       strengthTotal,
       isometricTotal,
       cardioTime,
+      exerciseCount,
+      totalWorkSets,
+      avgRPE: rpeCount > 0 ? Math.round(rpeSum / rpeCount * 10) / 10 : null,
     });
   }
 
@@ -379,19 +449,19 @@ export interface WeeklyMuscleSets {
   workingSets: number;
 }
 
-export async function getWeeklyMuscleSets(): Promise<WeeklyMuscleSets[]> {
+export async function getWeeklyMuscleSets(weeksBack: number = 0): Promise<WeeklyMuscleSets[]> {
   const now = new Date();
-  const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+  const targetWeek = subWeeks(now, weeksBack);
+  const weekStart = startOfWeek(targetWeek, { weekStartsOn: 1 });
+  const weekEnd = weeksBack === 0 ? now : endOfWeek(targetWeek, { weekStartsOn: 1 });
   const from = format(weekStart, 'yyyy-MM-dd');
-  const to = format(now, 'yyyy-MM-dd');
+  const to = format(weekEnd, 'yyyy-MM-dd');
 
   const { data: muscles } = await supabase.from('muscles').select('*').order('id');
-  const { data: exercises } = await supabase.from('exercises').select('*');
-  const { data: predefined } = await supabase.from('predefined_exercises').select('*');
+  const exercises = await getAllExercisesForCalc();
   const { data: sessions } = await supabase.from('sessions').select('id').gte('date', from).lte('date', to);
   if (!muscles || !sessions?.length) return [];
 
-  const allExercises = [...(exercises ?? []), ...(predefined ?? [])];
   const sessionIds = sessions.map(s => s.id);
   const { data: sesExs } = await supabase.from('session_exercises').select('*').in('session_id', sessionIds);
   if (!sesExs?.length) return [];
@@ -400,7 +470,6 @@ export async function getWeeklyMuscleSets(): Promise<WeeklyMuscleSets[]> {
   const { data: allSets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
   if (!allSets) return [];
 
-  // Count working sets per exercise
   const setsPerExercise = new Map<string, number>();
   for (const se of sesExs) {
     const workCount = allSets.filter(s => s.session_exercise_id === se.id && s.set_type === 'work').length;
@@ -411,7 +480,7 @@ export async function getWeeklyMuscleSets(): Promise<WeeklyMuscleSets[]> {
   for (const muscle of muscles) {
     let totalSets = 0;
     for (const [exId, setCount] of setsPerExercise) {
-      const ex = allExercises.find(e => e.id === exId);
+      const ex = exercises.find(e => e.id === exId);
       if (!ex) continue;
       const isPrimary = (ex.primary_muscle_ids ?? []).includes(muscle.id);
       const isSecondary = (ex.secondary_muscle_ids ?? []).includes(muscle.id);
@@ -442,9 +511,9 @@ export function calculate1RM(weight: number, reps: number): number {
 }
 
 export async function getAll1RMs(): Promise<ExerciseRM[]> {
-  const { data: exercises } = await supabase.from('exercises').select('*');
+  const exercises = await getAllExercisesForCalc();
   const { data: allSessions } = await supabase.from('sessions').select('*');
-  if (!exercises || !allSessions) return [];
+  if (!exercises.length || !allSessions) return [];
   const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
   const results: ExerciseRM[] = [];
 
@@ -503,12 +572,12 @@ export async function get1RMHistory(exerciseId: string): Promise<RM1History[]> {
 
 // ============ Streak & Consistency ============
 export interface StreakData {
-  currentStreak: number; // consecutive weeks
+  currentStreak: number;
   bestStreak: number;
   sessionsThisMonth: number;
   weeklyAverage: number;
   daysSinceLastSession: number;
-  activityMap: Map<string, number>; // date -> session count (last 90 days)
+  activityMap: Map<string, number>;
 }
 
 export async function getStreakData(): Promise<StreakData> {
@@ -518,9 +587,7 @@ export async function getStreakData(): Promise<StreakData> {
   }
 
   const now = new Date();
-  const today = format(now, 'yyyy-MM-dd');
 
-  // Activity map (last 90 days)
   const activityMap = new Map<string, number>();
   const cutoff = format(subDays(now, 90), 'yyyy-MM-dd');
   for (const s of sessions) {
@@ -529,20 +596,16 @@ export async function getStreakData(): Promise<StreakData> {
     }
   }
 
-  // Days since last session
   const lastDate = sessions[0].date;
   const daysSinceLastSession = Math.floor((now.getTime() - new Date(lastDate).getTime()) / (1000 * 60 * 60 * 24));
 
-  // Sessions this month
   const monthStart = format(startOfMonth(now), 'yyyy-MM-dd');
   const sessionsThisMonth = sessions.filter(s => s.date >= monthStart).length;
 
-  // Weekly average (last 8 weeks)
   const eightWeeksAgo = format(subWeeks(now, 8), 'yyyy-MM-dd');
   const last8Weeks = sessions.filter(s => s.date >= eightWeeksAgo).length;
   const weeklyAverage = Math.round((last8Weeks / 8) * 10) / 10;
 
-  // Streak (consecutive weeks with at least 1 session)
   const sessionDates = new Set(sessions.map(s => s.date));
   let currentStreak = 0;
   let bestStreak = 0;
@@ -559,7 +622,7 @@ export async function getStreakData(): Promise<StreakData> {
       streak++;
       if (streak > bestStreak) bestStreak = streak;
     } else {
-      if (i === 0) { /* current week empty is OK, check if streak continues from last week */ }
+      if (i === 0) { /* current week empty is OK */ }
       else { if (currentStreak === 0) currentStreak = streak; streak = 0; }
     }
   }
@@ -592,7 +655,6 @@ export async function checkForPR(exerciseId: string, trackingType: TrackingType,
       const current1RM = calculate1RM(currentWeight, currentSet.reps ?? 0);
       const maxWeight = Math.max(0, ...historicalSets.map(s => s.weight ?? 0));
       const max1RM = Math.max(0, ...historicalSets.map(s => calculate1RM(s.weight ?? 0, s.reps ?? 0)));
-
       if (currentWeight > maxWeight && currentWeight > 0) return { isPR: true, prType: 'weight', previousBest: maxWeight, newValue: currentWeight };
       if (current1RM > max1RM && current1RM > 0) return { isPR: true, prType: '1rm', previousBest: max1RM, newValue: current1RM };
       break;
