@@ -50,7 +50,16 @@ function getGroupAvgFatigue(groupIds: number[], fatigueMap: Map<number, number>)
 
 export function FatigueHistory({ sessions, muscleNames }: FatigueHistoryProps) {
   const [range, setRange] = useState<RangeKey>('7d');
+  const [hiddenGroups, setHiddenGroups] = useState<Set<string>>(new Set());
 
+  const toggleGroup = (label: string) => {
+    setHiddenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(label)) next.delete(label);
+      else next.add(label);
+      return next;
+    });
+  };
   const chartData = useMemo(() => {
     const days = range === '7d' ? 7 : 14;
     const now = new Date();
@@ -147,10 +156,6 @@ export function FatigueHistory({ sessions, muscleNames }: FatigueHistoryProps) {
                 }}
                 formatter={(value: number) => [`${value}%`]}
               />
-              <Legend
-                wrapperStyle={{ fontSize: '10px', paddingTop: '8px' }}
-                iconSize={8}
-              />
               {activeGroups.map((group) => (
                 <Line
                   key={group.label}
@@ -160,39 +165,43 @@ export function FatigueHistory({ sessions, muscleNames }: FatigueHistoryProps) {
                   strokeWidth={2}
                   dot={false}
                   activeDot={{ r: 3, strokeWidth: 0 }}
+                  hide={hiddenGroups.has(group.label)}
                 />
               ))}
               {/* Reference lines for thresholds */}
-              <Line
-                dataKey={() => 30}
-                stroke="hsl(140 60% 45%)"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                dot={false}
-                legendType="none"
-                name=""
-              />
-              <Line
-                dataKey={() => 60}
-                stroke="hsl(45 90% 50%)"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                dot={false}
-                legendType="none"
-                name=""
-              />
-              <Line
-                dataKey={() => 85}
-                stroke="hsl(0 80% 50%)"
-                strokeDasharray="4 4"
-                strokeWidth={1}
-                dot={false}
-                legendType="none"
-                name=""
-              />
+              <Line dataKey={() => 30} stroke="hsl(140 60% 45%)" strokeDasharray="4 4" strokeWidth={1} dot={false} legendType="none" name="" />
+              <Line dataKey={() => 60} stroke="hsl(45 90% 50%)" strokeDasharray="4 4" strokeWidth={1} dot={false} legendType="none" name="" />
+              <Line dataKey={() => 85} stroke="hsl(0 80% 50%)" strokeDasharray="4 4" strokeWidth={1} dot={false} legendType="none" name="" />
             </LineChart>
           </ResponsiveContainer>
         </div>
+
+        {/* Interactive muscle group toggles */}
+        <div className="flex flex-wrap gap-1.5 mt-3 justify-center">
+          {activeGroups.map((group) => {
+            const isHidden = hiddenGroups.has(group.label);
+            return (
+              <button
+                key={group.label}
+                onClick={() => toggleGroup(group.label)}
+                className="flex items-center gap-1 px-2 py-0.5 rounded-full border text-[10px] font-medium transition-all"
+                style={{
+                  borderColor: isHidden ? 'hsl(var(--border))' : group.color,
+                  backgroundColor: isHidden ? 'transparent' : `${group.color.replace(')', ' / 0.15)')}`,
+                  color: isHidden ? 'hsl(var(--muted-foreground))' : group.color,
+                  opacity: isHidden ? 0.5 : 1,
+                }}
+              >
+                <div
+                  className="w-2 h-2 rounded-full"
+                  style={{ backgroundColor: isHidden ? 'hsl(var(--muted-foreground))' : group.color }}
+                />
+                {group.label}
+              </button>
+            );
+          })}
+        </div>
+
         {/* Threshold legend */}
         <div className="flex items-center justify-center gap-4 mt-2">
           {[
