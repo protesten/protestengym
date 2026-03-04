@@ -21,90 +21,59 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
 import { RestTimer } from '@/components/RestTimer';
-import { WarmupCalculator } from '@/components/WarmupCalculator';
+import { WeightSuggestion } from '@/components/WeightSuggestion';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2, TrendingUp, TrendingDown, Equal } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2 } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { SessionExportCard } from '@/components/SessionExportCard';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { PreviousSessionReference } from '@/components/PreviousSessionReference';
 
-function NumericInput({ value, placeholder, className, onSave, hint }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void; hint?: string }) {
+/* ── Compact numeric input ── */
+function NumericInput({ value, placeholder, className, onSave }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void }) {
   const [local, setLocal] = useState(value?.toString() ?? '');
   useEffect(() => { setLocal(value?.toString() ?? ''); }, [value]);
   return (
-    <div className="flex flex-col">
-      <Input
-        inputMode="decimal" placeholder={placeholder}
-        className={cn("rounded-md bg-secondary/50 border-border", className)}
-        value={local} onChange={e => setLocal(e.target.value)}
-        onBlur={() => { const parsed = local.trim() === '' ? null : Number(local); if (parsed !== value) onSave(parsed); }}
-      />
-      {hint && <span className="text-[9px] text-muted-foreground/60 font-mono mt-0.5 px-0.5 truncate">{hint}</span>}
-    </div>
+    <Input
+      inputMode="decimal" placeholder={placeholder}
+      className={cn("rounded-md bg-secondary/50 border-border text-center", className)}
+      value={local} onChange={e => setLocal(e.target.value)}
+      onBlur={() => { const parsed = local.trim() === '' ? null : Number(local); if (parsed !== value) onSave(parsed); }}
+    />
   );
 }
 
-function PlannedRangeBadge({ plannedSet, trackingType }: { plannedSet?: PlannedSet; trackingType: TrackingType }) {
-  if (!plannedSet) return null;
+/* ── Set type chip (tap to cycle) ── */
+const SET_TYPE_CHIPS: Record<SetType, { label: string; color: string }> = {
+  work: { label: 'T', color: 'bg-primary/20 text-primary' },
+  warmup: { label: 'C', color: 'bg-orange-400/20 text-orange-400' },
+  approach: { label: 'A', color: 'bg-blue-400/20 text-blue-400' },
+};
+const SET_TYPE_ORDER: SetType[] = ['work', 'warmup', 'approach'];
 
-  const badges: { range: string; unit: string }[] = [];
-
-  if ((trackingType === 'weight_reps' || trackingType === 'reps_only') && (plannedSet.min_reps != null || plannedSet.max_reps != null)) {
-    const range = plannedSet.min_reps != null && plannedSet.max_reps != null
-      ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
-      : plannedSet.min_reps != null ? `${plannedSet.min_reps}+` : `≤${plannedSet.max_reps}`;
-    badges.push({ range, unit: 'r' });
-  }
-
-  if ((trackingType === 'time_only' || trackingType === 'distance_time') && (plannedSet.min_time_seconds != null || plannedSet.max_time_seconds != null)) {
-    const range = plannedSet.min_time_seconds != null && plannedSet.max_time_seconds != null
-      ? `${plannedSet.min_time_seconds}-${plannedSet.max_time_seconds}`
-      : plannedSet.min_time_seconds != null ? `${plannedSet.min_time_seconds}+` : `≤${plannedSet.max_time_seconds}`;
-    badges.push({ range, unit: 's' });
-  }
-
-  if (trackingType === 'distance_time' && (plannedSet.min_distance_meters != null || plannedSet.max_distance_meters != null)) {
-    const range = plannedSet.min_distance_meters != null && plannedSet.max_distance_meters != null
-      ? `${plannedSet.min_distance_meters}-${plannedSet.max_distance_meters}`
-      : plannedSet.min_distance_meters != null ? `${plannedSet.min_distance_meters}+` : `≤${plannedSet.max_distance_meters}`;
-    badges.push({ range, unit: 'm' });
-  }
-
-  if (badges.length === 0) return null;
-
+function SetTypeChip({ type, onChange }: { type: SetType; onChange: (t: SetType) => void }) {
+  const chip = SET_TYPE_CHIPS[type] ?? SET_TYPE_CHIPS.work;
+  const cycle = () => {
+    const idx = SET_TYPE_ORDER.indexOf(type);
+    onChange(SET_TYPE_ORDER[(idx + 1) % SET_TYPE_ORDER.length]);
+  };
   return (
-    <div className="flex gap-1 shrink-0">
-      {badges.map((b, i) => (
-        <span key={i} className="text-[10px] font-mono text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded" title="Rango pautado">
-          {b.range}{b.unit}
-        </span>
-      ))}
-    </div>
+    <button
+      onClick={cycle}
+      className={cn("w-7 h-7 rounded-md text-[11px] font-black shrink-0 transition-colors", chip.color)}
+      title={SET_TYPE_LABELS[type]}
+    >
+      {chip.label}
+    </button>
   );
 }
 
-function rpeColor(rpe: number | null | undefined): string {
-  if (rpe == null) return 'text-primary/70 bg-primary/10';
-  if (rpe <= 4) return 'text-green-400 bg-green-400/15';
-  if (rpe <= 6) return 'text-yellow-400 bg-yellow-400/15';
-  if (rpe <= 8) return 'text-orange-400 bg-orange-400/15';
-  return 'text-red-400 bg-red-400/15';
-}
-
-function DeltaBadge({ current, previous }: { current: number | null; previous: number | null | undefined }) {
-  if (current == null || previous == null) return null;
-  const diff = current - previous;
-  if (diff === 0) return <Equal className="h-3 w-3 text-muted-foreground/50" />;
-  if (diff > 0) return <TrendingUp className="h-3 w-3 text-green-400" />;
-  return <TrendingDown className="h-3 w-3 text-red-400" />;
-}
-
+/* ── Set row: ultra compact ── */
 function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; prevSet?: WorkoutSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = (set as any).rpe;
-  
+
   const repsPlaceholder = plannedSet && plannedSet.min_reps != null && plannedSet.max_reps != null
     ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
     : 'reps';
@@ -115,95 +84,63 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
     ? `${(plannedSet as any).min_distance_meters}-${(plannedSet as any).max_distance_meters}`
     : 'm';
 
-  // Build hints from previous session
-  const weightHint = prevSet?.weight != null ? `${prevSet.weight}` : undefined;
-  const repsHint = prevSet?.reps != null ? `${prevSet.reps}` : undefined;
-  const durationHint = prevSet?.duration_seconds != null ? `${prevSet.duration_seconds}` : undefined;
-  const distanceHint = prevSet?.distance_meters != null ? `${prevSet.distance_meters}` : undefined;
-
-  // Compute overall comparison for the set
-  const getSetComparison = (): 'up' | 'down' | 'equal' | null => {
+  // Comparison border
+  const getComparison = (): 'up' | 'down' | 'equal' | null => {
     if (!prevSet) return null;
     if (trackingType === 'weight_reps') {
-      if (set.weight == null || set.reps == null) return null;
-      if (prevSet.weight == null || prevSet.reps == null) return null;
-      const curVol = set.weight * set.reps;
-      const prevVol = prevSet.weight * prevSet.reps;
-      if (curVol > prevVol) return 'up';
-      if (curVol < prevVol) return 'down';
-      return 'equal';
+      if (set.weight == null || set.reps == null || prevSet.weight == null || prevSet.reps == null) return null;
+      const cur = set.weight * set.reps, prev = prevSet.weight * prevSet.reps;
+      return cur > prev ? 'up' : cur < prev ? 'down' : 'equal';
     }
     if (trackingType === 'reps_only') {
       if (set.reps == null || prevSet.reps == null) return null;
-      if (set.reps > prevSet.reps) return 'up';
-      if (set.reps < prevSet.reps) return 'down';
-      return 'equal';
+      return set.reps > prevSet.reps ? 'up' : set.reps < prevSet.reps ? 'down' : 'equal';
     }
     if (trackingType === 'time_only') {
       if (set.duration_seconds == null || prevSet.duration_seconds == null) return null;
-      if (set.duration_seconds > prevSet.duration_seconds) return 'up';
-      if (set.duration_seconds < prevSet.duration_seconds) return 'down';
-      return 'equal';
+      return set.duration_seconds > prevSet.duration_seconds ? 'up' : set.duration_seconds < prevSet.duration_seconds ? 'down' : 'equal';
     }
     if (trackingType === 'distance_time') {
       if (set.distance_meters == null || prevSet.distance_meters == null) return null;
-      if (set.distance_meters > prevSet.distance_meters) return 'up';
-      if (set.distance_meters < prevSet.distance_meters) return 'down';
-      return 'equal';
+      return set.distance_meters > prevSet.distance_meters ? 'up' : set.distance_meters < prevSet.distance_meters ? 'down' : 'equal';
     }
     return null;
   };
-
-  const comparison = getSetComparison();
-  const borderClass = comparison === 'up' ? 'border-l-2 border-l-green-400' : comparison === 'down' ? 'border-l-2 border-l-red-400' : comparison === 'equal' ? 'border-l-2 border-l-muted-foreground/30' : '';
+  const cmp = getComparison();
+  const borderClass = cmp === 'up' ? 'border-l-2 border-l-green-400' : cmp === 'down' ? 'border-l-2 border-l-red-400' : cmp === 'equal' ? 'border-l-2 border-l-muted-foreground/30' : '';
 
   return (
-    <div className={cn("flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/20 flex-wrap", borderClass)}>
-      <Select value={set.set_type} onValueChange={v => onUpdate({ set_type: v as SetType })}>
-        <SelectTrigger className="w-24 h-8 text-xs rounded-md bg-card border-border"><SelectValue /></SelectTrigger>
-        <SelectContent>{Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
-      </Select>
-      {(trackingType === 'weight_reps') && (
+    <div className={cn("flex items-center gap-1.5 py-1 px-1.5 rounded-lg bg-secondary/20", borderClass)}>
+      <SetTypeChip type={set.set_type as SetType} onChange={v => onUpdate({ set_type: v })} />
+
+      {trackingType === 'weight_reps' && (
         <>
-          <NumericInput value={set.weight} placeholder="kg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ weight: v })} hint={weightHint} />
-          <DeltaBadge current={set.weight} previous={prevSet?.weight} />
-          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />
-          <DeltaBadge current={set.reps} previous={prevSet?.reps} />
+          <NumericInput value={set.weight} placeholder="kg" className="w-[60px] h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
+          <span className="text-muted-foreground/40 text-xs">×</span>
+          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-[52px] h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
         </>
       )}
       {trackingType === 'reps_only' && (
-        <>
-          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} hint={repsHint} />
-          <DeltaBadge current={set.reps} previous={prevSet?.reps} />
-        </>
+        <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
       )}
       {trackingType === 'time_only' && (
-        <>
-          <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
-          <DeltaBadge current={set.duration_seconds} previous={prevSet?.duration_seconds} />
-        </>
+        <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
       )}
       {trackingType === 'distance_time' && (
         <>
-          <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
-          <DeltaBadge current={set.duration_seconds} previous={prevSet?.duration_seconds} />
-          <NumericInput value={set.distance_meters} placeholder={distancePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} hint={distanceHint} />
-          <DeltaBadge current={set.distance_meters} previous={prevSet?.distance_meters} />
+          <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
+          <NumericInput value={set.distance_meters} placeholder={distancePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
         </>
       )}
-      <div className="flex items-center gap-1">
-        <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
-          <SelectTrigger className={cn("w-20 h-8 text-xs rounded-md bg-card border-border", plannedSet?.rpe != null && rpeValue == null && "border-primary/30")}><SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} /></SelectTrigger>
-          <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
-        </Select>
-        {plannedSet?.rpe != null && (
-          <span className={cn("text-[10px] font-mono px-1.5 py-0.5 rounded shrink-0", rpeColor(plannedSet.rpe))} title="RPE pautado">
-            @{plannedSet.rpe}
-          </span>
-        )}
-      </div>
-      <PlannedRangeBadge plannedSet={plannedSet} trackingType={trackingType} />
-      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+
+      <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
+        <SelectTrigger className="w-16 h-8 text-xs rounded-md bg-card border-border">
+          <SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} />
+        </SelectTrigger>
+        <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>@{r}</SelectItem>)}</SelectContent>
+      </Select>
+
+      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 ml-auto" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive/70" /></Button>
     </div>
   );
 }
@@ -218,7 +155,7 @@ export default function SessionDetail() {
   const { data: sessionExercises } = useQuery({ queryKey: ['session_exercises', sessionId], queryFn: () => getSessionExercises(sessionId) });
   const { data: exercises } = useQuery({ queryKey: ['all_exercises'], queryFn: getAllExercises });
   const { data: allSets } = useQuery({ queryKey: ['sets', sessionId], queryFn: () => getSetsBySession(sessionId) });
-  
+
   const routineId = session?.routine_id;
   const { data: routineExercises } = useQuery({
     queryKey: ['routine_exercises', routineId],
@@ -226,24 +163,14 @@ export default function SessionDetail() {
     enabled: !!routineId,
   });
 
-  // Fetch previous sets for each exercise in this session
-  const exerciseIds = useMemo(() => {
-    return [...new Set(sessionExercises?.map(se => se.exercise_id) ?? [])];
-  }, [sessionExercises]);
+  const exerciseIds = useMemo(() => [...new Set(sessionExercises?.map(se => se.exercise_id) ?? [])], [sessionExercises]);
 
   const { data: prevSetsMap } = useQuery({
     queryKey: ['prev_sets', sessionId, exerciseIds],
     queryFn: async () => {
       const map = new Map<string, PreviousSessionData>();
-      const results = await Promise.all(
-        exerciseIds.map(async (eid) => {
-          const result = await getPreviousSetsForExercise(eid, sessionId);
-          return { eid, result };
-        })
-      );
-      for (const { eid, result } of results) {
-        map.set(eid, result);
-      }
+      const results = await Promise.all(exerciseIds.map(async (eid) => ({ eid, result: await getPreviousSetsForExercise(eid, sessionId) })));
+      for (const { eid, result } of results) map.set(eid, result);
       return map;
     },
     enabled: exerciseIds.length > 0,
@@ -307,15 +234,8 @@ export default function SessionDetail() {
       await queryClient.cancelQueries({ queryKey: setsQueryKey });
       const prev = queryClient.getQueryData<WorkoutSet[]>(setsQueryKey);
       const optimisticSet: WorkoutSet = {
-        id: `temp-${Date.now()}`,
-        session_exercise_id: seId,
-        set_type: 'work',
-        weight: null,
-        reps: null,
-        duration_seconds: null,
-        distance_meters: null,
-        rpe: null,
-        created_at: new Date().toISOString(),
+        id: `temp-${Date.now()}`, session_exercise_id: seId, set_type: 'work',
+        weight: null, reps: null, duration_seconds: null, distance_meters: null, rpe: null, created_at: new Date().toISOString(),
       };
       queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old => [...(old ?? []), optimisticSet]);
       return { prev };
@@ -330,14 +250,11 @@ export default function SessionDetail() {
     onMutate: async ({ setId, data }) => {
       await queryClient.cancelQueries({ queryKey: setsQueryKey });
       const prev = queryClient.getQueryData<WorkoutSet[]>(setsQueryKey);
-      queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old =>
-        (old ?? []).map(s => s.id === setId ? { ...s, ...data } : s)
-      );
+      queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old => (old ?? []).map(s => s.id === setId ? { ...s, ...data } : s));
       return { prev };
     },
     onError: (_err, _vars, ctx) => { if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev); },
     onSuccess: async (_res, { setId, data, exerciseId }) => {
-      // Check for PR in onSuccess (non-blocking)
       if (exerciseId && (data.weight != null || data.reps != null || data.duration_seconds != null || data.distance_meters != null)) {
         const currentSet = allSets?.find(s => s.id === setId);
         if (currentSet) {
@@ -427,45 +344,59 @@ export default function SessionDetail() {
     toast.success('CSV exportado');
   };
 
+  // Weight suggestion: apply to first empty set of an exercise
+  const handleApplyWeight = (seId: string, weight: number) => {
+    const sets = getSets(seId);
+    const emptySet = sets.find(s => s.weight == null);
+    if (emptySet) {
+      updateSetMutation.mutate({ setId: emptySet.id, data: { weight } });
+      toast.success(`${weight} kg aplicado`);
+    } else {
+      toast(`Peso sugerido: ${weight} kg`, { description: 'Todas las series ya tienen peso' });
+    }
+  };
+
   if (!session) return <div className="p-4 text-muted-foreground">Cargando...</div>;
 
   return (
-    <div className="p-4 pb-24 max-w-lg mx-auto">
-      <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm font-medium hover:text-foreground transition-colors">
+    <div className="p-3 pb-24 max-w-lg mx-auto">
+      {/* Header */}
+      <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-3 text-sm font-medium hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />Inicio
       </button>
 
       <div className="flex items-center justify-between mb-2">
         <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
           <PopoverTrigger asChild>
-            <Button variant="ghost" className="text-xl font-black px-2 h-auto py-1 gap-2 hover:bg-secondary/50">
-              Sesión {session.date}
-              <CalendarIcon className="h-4 w-4 text-primary" />
+            <Button variant="ghost" className="text-lg font-black px-2 h-auto py-1 gap-1.5 hover:bg-secondary/50">
+              {session.date}
+              <CalendarIcon className="h-3.5 w-3.5 text-primary" />
             </Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0 bg-card border-border rounded-xl pointer-events-auto" align="start" sideOffset={4}>
-            <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); setDatePopoverOpen(false); } }} initialFocus className={cn("p-3 pointer-events-auto")} />
+            <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); setDatePopoverOpen(false); } }} initialFocus className="p-3 pointer-events-auto" />
           </PopoverContent>
         </Popover>
-        <div className="flex gap-1">
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleExportSession} title="Descargar imagen"><Download className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleShareSession} title="Compartir"><Share2 className="h-4 w-4" /></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleExportCSV} title="Exportar CSV"><span className="text-[10px] font-mono font-bold">CSV</span></Button>
-          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => duplicateMutation.mutate()} title="Duplicar sesión"><Copy className="h-4 w-4" /></Button>
+        <div className="flex gap-0.5">
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleExportSession} title="Descargar"><Download className="h-3.5 w-3.5" /></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleShareSession} title="Compartir"><Share2 className="h-3.5 w-3.5" /></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleExportCSV} title="CSV"><span className="text-[9px] font-mono font-bold">CSV</span></Button>
+          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => duplicateMutation.mutate()} title="Duplicar"><Copy className="h-3.5 w-3.5" /></Button>
           <AlertDialog>
-            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-8 w-8 text-destructive"><Trash2 className="h-4 w-4" /></Button></AlertDialogTrigger>
+            <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
             <AlertDialogContent className="bg-card border-border rounded-2xl">
-              <AlertDialogHeader><AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle><AlertDialogDescription>Se borrarán todos los ejercicios y series. No se puede deshacer.</AlertDialogDescription></AlertDialogHeader>
+              <AlertDialogHeader><AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle><AlertDialogDescription>Se borrarán todos los ejercicios y series.</AlertDialogDescription></AlertDialogHeader>
               <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSessionMutation.mutate()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
         </div>
       </div>
 
-      <div className="mb-4">
+      {/* Notes */}
+      <div className="mb-3">
         {editingNotes ? (
           <div className="space-y-2">
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas de la sesión..." className="text-sm min-h-[60px] rounded-xl bg-secondary/30 border-border" />
+            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas..." className="text-sm min-h-[50px] rounded-xl bg-secondary/30 border-border" />
             <div className="flex gap-2">
               <Button size="sm" className="gradient-primary text-primary-foreground border-0 rounded-lg" onClick={() => saveNotesMutation.mutate()}>Guardar</Button>
               <Button size="sm" variant="ghost" onClick={() => { setEditingNotes(false); setNotes(session.notes ?? ''); }}>Cancelar</Button>
@@ -474,11 +405,12 @@ export default function SessionDetail() {
         ) : (
           <button onClick={() => setEditingNotes(true)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
             <StickyNote className="h-3.5 w-3.5" />
-            {session.notes ? <span className="text-foreground">{session.notes}</span> : <span>Añadir notas...</span>}
+            {session.notes ? <span className="text-foreground text-xs">{session.notes}</span> : <span className="text-xs">Notas...</span>}
           </button>
         )}
       </div>
 
+      {/* Exercises */}
       <Accordion type="multiple" className="space-y-2">
         {sessionExercises?.map((se, idx) => {
           const ex = getExercise(se.exercise_id);
@@ -490,32 +422,30 @@ export default function SessionDetail() {
           const isFirst = idx === 0;
           const isLast = idx === (sessionExercises.length - 1);
           return (
-            <AccordionItem key={se.id} value={se.id} className="border border-border rounded-xl px-3 bg-card">
-              <div className="flex items-center">
-                <div className="flex flex-col mr-1">
+            <AccordionItem key={se.id} value={se.id} className="border border-border rounded-xl px-2 bg-card">
+              <div className="flex items-center gap-0.5">
+                <div className="flex flex-col">
                   <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'up' })}><ChevronUp className="h-3 w-3" /></Button>
                   <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'down' })}><ChevronDown className="h-3 w-3" /></Button>
                 </div>
-                <AccordionTrigger className="py-3 text-sm font-bold flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
-                <ExerciseNotePopover
-                  exerciseId={se.exercise_id}
-                  exerciseNotes={(ex as any)?.notes ?? null}
-                  source={ex?.source ?? 'personal'}
-                />
-                {ex?.tracking_type === 'weight_reps' && (
-                  <WarmupCalculator exerciseName={ex?.name ?? 'Ejercicio'} />
-                )}
-                <AlertDialog>
-                  <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
-                  <AlertDialogContent className="bg-card border-border rounded-2xl">
-                    <AlertDialogHeader><AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle><AlertDialogDescription>Se borrarán todas las series de este ejercicio.</AlertDialogDescription></AlertDialogHeader>
-                    <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <AccordionTrigger className="py-2.5 text-sm font-bold flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
+                <div className="flex items-center gap-0">
+                  <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={(ex as any)?.notes ?? null} source={ex?.source ?? 'personal'} />
+                  {ex?.tracking_type === 'weight_reps' && (
+                    <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} onApply={(w) => handleApplyWeight(se.id, w)} />
+                  )}
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive/70" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
+                    <AlertDialogContent className="bg-card border-border rounded-2xl">
+                      <AlertDialogHeader><AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle><AlertDialogDescription>Se borrarán todas las series.</AlertDialogDescription></AlertDialogHeader>
+                      <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
               </div>
               <AccordionContent>
                 <PreviousSessionReference sets={prevSets} date={prevDate} trackingType={ex?.tracking_type ?? 'weight_reps'} />
-                <div className="space-y-1.5">
+                <div className="space-y-1">
                   {sets.map((s, setIdx) => (
                     <SetRow
                       key={s.id}
@@ -528,7 +458,7 @@ export default function SessionDetail() {
                     />
                   ))}
                 </div>
-                <Button variant="outline" size="sm" className="mt-2 w-full rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => addSetMutation.mutate(se.id)}>
+                <Button variant="outline" size="sm" className="mt-2 w-full rounded-lg border-dashed border-border hover:border-primary/30 h-8 text-xs" onClick={() => addSetMutation.mutate(se.id)}>
                   <Plus className="h-3 w-3 mr-1" />Serie
                 </Button>
               </AccordionContent>
@@ -537,32 +467,27 @@ export default function SessionDetail() {
         })}
       </Accordion>
 
-      <div className="flex gap-2 mt-4">
+      {/* Add exercise */}
+      <div className="flex gap-2 mt-3">
         <ExerciseSearchSelect exercises={exercises} value={addExId} onChange={setAddExId} />
         <Button size="icon" className="gradient-primary text-primary-foreground border-0 rounded-lg shrink-0" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
       </div>
 
+      {/* Summary */}
       {summary && (
-        <div className="mt-6 p-4 rounded-xl bg-card border border-border space-y-2">
-          <h3 className="font-bold text-sm mb-2 text-primary">Resumen</h3>
-          {summary.strengthTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Fuerza total</span><span className="font-mono font-bold">{summary.strengthTotal.toLocaleString()}</span></div>}
-          {summary.isometricTotal > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Isométricos</span><span className="font-mono font-bold">{Math.floor(summary.isometricTotal / 60)}m {summary.isometricTotal % 60}s</span></div>}
-          {summary.cardioTime > 0 && <div className="flex justify-between text-sm"><span className="text-muted-foreground">Cardio</span><span className="font-mono font-bold">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
+        <div className="mt-4 p-3 rounded-xl bg-card border border-border space-y-1.5">
+          <h3 className="font-bold text-xs mb-1 text-primary">Resumen</h3>
+          {summary.strengthTotal > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Fuerza total</span><span className="font-mono font-bold">{summary.strengthTotal.toLocaleString()}</span></div>}
+          {summary.isometricTotal > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Isométricos</span><span className="font-mono font-bold">{Math.floor(summary.isometricTotal / 60)}m {summary.isometricTotal % 60}s</span></div>}
+          {summary.cardioTime > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Cardio</span><span className="font-mono font-bold">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
         </div>
       )}
 
-      {/* Rest Timer */}
       <RestTimer />
 
-      {/* Hidden export card */}
       {showExportCard && (
         <div className="fixed left-[-9999px] top-0">
-          <SessionExportCard
-            ref={exportCardRef}
-            date={session.date}
-            exercises={buildExportData()}
-            summary={{ strengthTotal: summary?.strengthTotal ?? 0, isometricTotal: summary?.isometricTotal ?? 0, cardioTime: summary?.cardioTime ?? 0 }}
-          />
+          <SessionExportCard ref={exportCardRef} date={session.date} exercises={buildExportData()} summary={{ strengthTotal: summary?.strengthTotal ?? 0, isometricTotal: summary?.isometricTotal ?? 0, cardioTime: summary?.cardioTime ?? 0 }} />
         </div>
       )}
     </div>
