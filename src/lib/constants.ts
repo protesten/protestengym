@@ -37,4 +37,8 @@ export type PlannedSet = {
   rpe: number | null;
   min_reps: number | null;
   max_reps: number | null;
+  min_time_seconds: number | null;
+  max_time_seconds: number | null;
+  min_distance_meters: number | null;
+  max_distance_meters: number | null;
 };
