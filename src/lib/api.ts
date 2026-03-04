@@ -238,7 +238,9 @@ export async function deleteSet(id: string) {
 }
 
 // ============ Previous Session Data (for reference) ============
-export async function getPreviousSetsForExercise(exerciseId: string, currentSessionId: string): Promise<WorkoutSet[]> {
+export type PreviousSessionData = { sets: WorkoutSet[]; date: string | null };
+
+export async function getPreviousSetsForExercise(exerciseId: string, currentSessionId: string): Promise<PreviousSessionData> {
   // Find the most recent session_exercise for this exercise, excluding the current session
   const { data: ses, error: seErr } = await supabase
     .from('session_exercises')
@@ -247,11 +249,12 @@ export async function getPreviousSetsForExercise(exerciseId: string, currentSess
     .neq('session_id', currentSessionId)
     .order('sessions(date)', { ascending: false })
     .limit(1);
-  if (seErr || !ses?.length) return [];
+  if (seErr || !ses?.length) return { sets: [], date: null };
   const seId = ses[0].id;
+  const sessionDate = (ses[0] as any).sessions?.date ?? null;
   const { data: sets, error } = await supabase.from('sets').select('*').eq('session_exercise_id', seId).order('created_at');
-  if (error) return [];
-  return sets ?? [];
+  if (error) return { sets: [], date: sessionDate };
+  return { sets: sets ?? [], date: sessionDate };
 }
 
 // ============ Profile ============
