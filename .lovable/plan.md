@@ -1,22 +1,50 @@
 
 
-## Diagnosis
+## Ampliación de Medidas Corporales para Análisis Antropométrico
 
-The "Continuar con Google" button does not respond to touch on Chrome Android, but works on desktop. After reviewing the Auth page layout, I identified **two likely causes**:
+### Resumen
 
-### 1. Touch events intercepted by overlay elements (most likely)
-The Auth page has two absolutely positioned blur divs that cover the entire screen. The title section has `relative z-10` to appear above them, but **the Button does NOT have any z-index**, meaning the blur overlays sit on top of the button and capture touch events on mobile. Desktop mouse events behave differently and can pass through, which explains why it works on desktop but not on mobile.
+Ampliar la tabla `body_measurements` con todos los campos de medición solicitados y añadir campos de altura y edad al perfil del usuario para completar el análisis antropométrico.
 
-### 2. Async popup/redirect blocked on mobile
-On mobile browsers, popups or redirects triggered after an `await` can lose the "user gesture" context, causing the browser to silently block them. The current flow wraps the OAuth call in async/await which may break the gesture chain on Chrome Android.
+### Nuevos campos de medición
 
-## Plan
+Reemplazar los campos actuales (chest_cm, waist_cm, arm_cm, thigh_cm, body_fat_pct) por un conjunto completo:
 
-### Fix 1: Add `relative z-10` to the Button
-In `src/pages/Auth.tsx`, add `relative z-10` to the Button's className so it sits above the decorative blur elements and receives touch events properly.
+| Campo | Columna DB |
+|---|---|
+| Cuello | neck_cm |
+| Pecho | chest_cm (ya existe) |
+| Bíceps derecho contraído | bicep_right_contracted_cm |
+| Bíceps derecho relajado | bicep_right_relaxed_cm |
+| Bíceps izquierdo contraído | bicep_left_contracted_cm |
+| Bíceps izquierdo relajado | bicep_left_relaxed_cm |
+| Cintura | waist_cm (ya existe) |
+| Abdomen | abdomen_cm |
+| Cadera | hip_cm |
+| Pliegue subglúteo derecho | subgluteal_right_cm |
+| Muslo derecho relajado | thigh_right_relaxed_cm |
+| Muslo derecho contraído | thigh_right_contracted_cm |
+| Muslo izquierdo relajado | thigh_left_relaxed_cm |
+| Muslo izquierdo contraído | thigh_left_contracted_cm |
+| Gemelo derecho | calf_right_cm |
+| Gemelo izquierdo | calf_left_cm |
 
-### Fix 2: Simplify click handler
-Remove the extra async wrapper in `handleGoogleClick` and call `signInWithGoogle()` more directly, or ensure `signingIn` state doesn't interfere. Also add `touch-action: manipulation` to prevent mobile touch delays.
+Se mantienen: weight_kg, body_fat_pct, chest_cm, waist_cm. Se eliminan del UI: arm_cm y thigh_cm (columnas antiguas se mantienen en DB por datos existentes).
 
-Both fixes are in `src/pages/Auth.tsx` only.
+### Cambios en el perfil
+
+Añadir a la tabla `profiles`: `height_cm` (numeric, nullable) y `birth_date` (date, nullable) para calcular la edad.
+
+### Plan de implementación
+
+1. **Migración DB**: Añadir ~14 nuevas columnas a `body_measurements` + 2 columnas a `profiles`
+2. **Actualizar `src/pages/Measurements.tsx`**: Reorganizar el formulario en secciones (Tren superior, Core, Tren inferior) con los nuevos campos. Actualizar la interfaz Measurement, el array FIELDS, el formulario y las tarjetas del historial
+3. **Actualizar `src/pages/Profile.tsx`**: Añadir campos de altura y fecha de nacimiento
+
+### Detalles técnicos
+
+- El formulario se organizará en secciones colapsables o con headers para no abrumar visualmente
+- Los chips del gráfico se agruparán o se usará un selector para manejar tantos campos
+- Las tarjetas del historial mostrarán solo los campos con valor, organizados por sección
+- Los tipos en la interfaz se actualizarán automáticamente tras la migración
 
