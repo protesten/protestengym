@@ -1,11 +1,11 @@
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getExercises } from '@/lib/api';
+import { getAllExercises, type AnyExercise } from '@/lib/api';
 import {
-  getExerciseComparisons, getMuscleComparisons, getAllSessionSummaries,
+  getExerciseComparisons, getMuscleComparisons,
   getExerciseHistory, formatSetSummary, getPersonalRecords, getPeriodSummaries,
-  type MuscleVolume, type SessionSummary, type Comparison,
+  type MuscleVolume, type Comparison,
   type ExerciseHistoryEntry, type PersonalRecord, type PeriodSummary,
 } from '@/db/calculations';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -14,20 +14,28 @@ import { ComparisonRow } from '@/components/ComparisonRow';
 import { Progress } from '@/components/ui/progress';
 import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
 import { StreakCard } from '@/components/StreakCard';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Trophy, TrendingUp, BarChart3 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
+import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock } from 'lucide-react';
 
 function ArrowBadge({ c }: { c: Comparison }) {
   const cls = c.arrow === '↑' ? 'arrow-up' : c.arrow === '↓' ? 'arrow-down' : 'arrow-equal';
   return <span className={`text-xs font-mono ${cls}`}>{c.current} {c.arrow}</span>;
 }
 
+function DeltaIndicator({ current, previous, unit = '' }: { current: number; previous: number; unit?: string }) {
+  if (previous === 0 && current === 0) return null;
+  const diff = current - previous;
+  const pct = previous > 0 ? Math.round((diff / previous) * 100) : current > 0 ? 100 : 0;
+  if (diff === 0) return <span className="flex items-center gap-0.5 text-xs text-muted-foreground"><Minus className="h-3 w-3" /> 0%</span>;
+  if (diff > 0) return <span className="flex items-center gap-0.5 text-xs text-green-400"><ArrowUp className="h-3 w-3" /> +{pct}%</span>;
+  return <span className="flex items-center gap-0.5 text-xs text-red-400"><ArrowDown className="h-3 w-3" /> {pct}%</span>;
+}
+
 export default function Analysis() {
-  const { data: exercises } = useQuery({ queryKey: ['exercises'], queryFn: getExercises });
+  const { data: exercises } = useQuery({ queryKey: ['allExercises'], queryFn: getAllExercises });
   const [selectedExId, setSelectedExId] = useState('');
   const [exComps, setExComps] = useState<{ week: any; month: any; lastSession: any } | null>(null);
   const [muscleData, setMuscleData] = useState<{ week: MuscleVolume[]; month: MuscleVolume[] }>({ week: [], month: [] });
-  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [musclePeriod, setMusclePeriod] = useState<'7d' | 'month'>('7d');
   const [history, setHistory] = useState<ExerciseHistoryEntry[]>([]);
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
@@ -38,14 +46,13 @@ export default function Analysis() {
 
   useEffect(() => {
     if (!selectedExId || !selectedEx) return;
-    getExerciseComparisons(selectedEx.id, selectedEx.tracking_type).then(setExComps);
-    getExerciseHistory(selectedEx.id, selectedEx.tracking_type).then(setHistory);
+    getExerciseComparisons(selectedEx.id, selectedEx.tracking_type as any).then(setExComps);
+    getExerciseHistory(selectedEx.id, selectedEx.tracking_type as any).then(setHistory);
   }, [selectedExId, exercises]);
 
   useEffect(() => {
     getMuscleComparisons('7d').then(w => setMuscleData(prev => ({ ...prev, week: w })));
     getMuscleComparisons('month').then(m => setMuscleData(prev => ({ ...prev, month: m })));
-    getAllSessionSummaries().then(setSessions);
     getPersonalRecords().then(setPrs);
   }, []);
 
@@ -61,6 +68,14 @@ export default function Analysis() {
   const chartData = [...history].reverse().map(h => ({ date: h.date.slice(5), value: h.totalMetric }));
   const maxStrength = Math.max(...periodData.map(p => p.strengthTotal), 1);
   const maxIso = Math.max(...periodData.map(p => p.isometricTotal), 1);
+
+  // Bar chart data for summary
+  const barChartData = [...periodData].reverse().map(p => ({
+    label: p.label.length > 10 ? p.label.slice(0, 8) + '…' : p.label,
+    fuerza: Math.round(p.strengthTotal),
+    sesiones: p.sessionCount,
+    series: p.totalWorkSets,
+  }));
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
@@ -82,7 +97,20 @@ export default function Analysis() {
         <TabsContent value="exercise" className="space-y-4 mt-4">
           <Select value={selectedExId} onValueChange={setSelectedExId}>
             <SelectTrigger className="rounded-xl bg-card border-border"><SelectValue placeholder="Seleccionar ejercicio" /></SelectTrigger>
-            <SelectContent>{exercises?.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
+            <SelectContent>
+              {exercises && exercises.filter(e => e.source === 'predefined').length > 0 && (
+                <>
+                  <div className="px-2 py-1 text-xs font-bold text-muted-foreground">Predefinidos</div>
+                  {exercises.filter(e => e.source === 'predefined').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </>
+              )}
+              {exercises && exercises.filter(e => e.source === 'personal').length > 0 && (
+                <>
+                  <div className="px-2 py-1 text-xs font-bold text-muted-foreground mt-1">Personales</div>
+                  {exercises.filter(e => e.source === 'personal').map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </>
+              )}
+            </SelectContent>
           </Select>
           {exComps && (
             <div className="space-y-2">
@@ -99,11 +127,11 @@ export default function Analysis() {
               <div className="rounded-xl bg-card border border-border p-3">
                 <ResponsiveContainer width="100%" height={180}>
                   <LineChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(225 12% 16%)" />
-                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(215 15% 50%)' }} />
-                    <YAxis tick={{ fontSize: 10, fill: 'hsl(215 15% 50%)' }} />
-                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid hsl(225 12% 16%)', background: 'hsl(225 14% 11%)' }} labelFormatter={(l) => `Fecha: ${l}`} formatter={(v: number) => [v.toLocaleString(), metricLabel]} />
-                    <Line type="monotone" dataKey="value" stroke="hsl(20, 100%, 60%)" strokeWidth={2} dot={{ r: 3, fill: 'hsl(20, 100%, 60%)' }} />
+                    <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                    <XAxis dataKey="date" tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                    <YAxis tick={{ fontSize: 10, fill: 'hsl(var(--muted-foreground))' }} />
+                    <Tooltip contentStyle={{ fontSize: 12, borderRadius: 12, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} labelFormatter={(l) => `Fecha: ${l}`} formatter={(v: number) => [v.toLocaleString(), metricLabel]} />
+                    <Line type="monotone" dataKey="value" stroke="hsl(var(--primary))" strokeWidth={2} dot={{ r: 3, fill: 'hsl(var(--primary))' }} />
                   </LineChart>
                 </ResponsiveContainer>
               </div>
@@ -119,7 +147,7 @@ export default function Analysis() {
                       <span className="text-xs text-muted-foreground">{h.date}</span>
                       <span className="text-xs font-mono font-bold text-primary">{h.totalMetric.toLocaleString()}{unitLabel && ` ${unitLabel}`}</span>
                     </div>
-                    <p className="text-xs text-muted-foreground mt-0.5">{formatSetSummary(h.sets, selectedEx!.tracking_type)}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{formatSetSummary(h.sets, selectedEx!.tracking_type as any)}</p>
                   </Link>
                 ))}
               </div>
@@ -133,18 +161,22 @@ export default function Analysis() {
             <button onClick={() => setMusclePeriod('7d')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === '7d' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>7 días</button>
             <button onClick={() => setMusclePeriod('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mes</button>
           </div>
-          <div className="space-y-1">
-            <div className="grid grid-cols-3 gap-2 px-3 py-1 text-xs text-muted-foreground font-semibold">
-              <span>Músculo</span><span className="text-center">Fuerza</span><span className="text-center">Isométrico</span>
-            </div>
-            {currentMuscleData.map(m => (
-              <div key={m.muscleId} className="grid grid-cols-3 gap-2 px-3 py-2.5 rounded-xl bg-card border border-border items-center">
-                <span className="text-sm font-semibold truncate">{m.muscleName}</span>
-                <div className="text-center"><ArrowBadge c={m.strength} /></div>
-                <div className="text-center"><ArrowBadge c={m.isometric} /></div>
+          {currentMuscleData.length === 0 ? (
+            <p className="text-center text-muted-foreground text-sm py-8">Sin datos de volumen muscular en este período</p>
+          ) : (
+            <div className="space-y-1">
+              <div className="grid grid-cols-3 gap-2 px-3 py-1 text-xs text-muted-foreground font-semibold">
+                <span>Músculo</span><span className="text-center">Fuerza</span><span className="text-center">Isométrico</span>
               </div>
-            ))}
-          </div>
+              {currentMuscleData.map(m => (
+                <div key={m.muscleId} className="grid grid-cols-3 gap-2 px-3 py-2.5 rounded-xl bg-card border border-border items-center">
+                  <span className="text-sm font-semibold truncate">{m.muscleName}</span>
+                  <div className="text-center"><ArrowBadge c={m.strength} /></div>
+                  <div className="text-center"><ArrowBadge c={m.isometric} /></div>
+                </div>
+              ))}
+            </div>
+          )}
         </TabsContent>
 
         <TabsContent value="volume" className="mt-4">
@@ -185,33 +217,90 @@ export default function Analysis() {
           <StreakCard />
         </TabsContent>
 
-        <TabsContent value="summary" className="mt-4">
-          <div className="flex gap-2 mb-4">
+        <TabsContent value="summary" className="mt-4 space-y-4">
+          <div className="flex gap-2">
             <button onClick={() => setPeriodGranularity('week')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${periodGranularity === 'week' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Semanal</button>
             <button onClick={() => setPeriodGranularity('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${periodGranularity === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mensual</button>
           </div>
+
+          {/* Summary bar chart */}
+          {barChartData.length > 0 && barChartData.some(d => d.sesiones > 0) && (
+            <div className="rounded-xl bg-card border border-border p-3">
+              <h3 className="text-xs font-bold mb-2 text-muted-foreground">Sesiones por período</h3>
+              <ResponsiveContainer width="100%" height={140}>
+                <BarChart data={barChartData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                  <XAxis dataKey="label" tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} />
+                  <YAxis tick={{ fontSize: 9, fill: 'hsl(var(--muted-foreground))' }} allowDecimals={false} />
+                  <Tooltip contentStyle={{ fontSize: 11, borderRadius: 12, border: '1px solid hsl(var(--border))', background: 'hsl(var(--card))' }} />
+                  <Bar dataKey="sesiones" name="Sesiones" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+
           <div className="space-y-2">
-            {periodData.map((p, i) => (
-              <div key={i} className="p-3.5 rounded-xl bg-card border border-border space-y-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-sm font-bold">{p.label}</span>
-                  <span className="text-xs text-muted-foreground font-semibold">{p.sessionCount} sesión{p.sessionCount !== 1 ? 'es' : ''}</span>
+            {periodData.map((p, i) => {
+              const prev = periodData[i + 1];
+              return (
+                <div key={i} className="p-3.5 rounded-xl bg-card border border-border space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-bold">{p.label}</span>
+                    <span className="text-xs text-muted-foreground font-semibold">{p.sessionCount} sesión{p.sessionCount !== 1 ? 'es' : ''}</span>
+                  </div>
+                  
+                  {/* Key metrics row */}
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="bg-secondary/30 rounded-lg p-2 text-center">
+                      <Dumbbell className="h-3 w-3 mx-auto mb-0.5 text-muted-foreground" />
+                      <p className="text-xs font-mono font-bold">{p.totalWorkSets}</p>
+                      <p className="text-[9px] text-muted-foreground">Series</p>
+                    </div>
+                    <div className="bg-secondary/30 rounded-lg p-2 text-center">
+                      <Activity className="h-3 w-3 mx-auto mb-0.5 text-muted-foreground" />
+                      <p className="text-xs font-mono font-bold">{p.exerciseCount}</p>
+                      <p className="text-[9px] text-muted-foreground">Ejercicios</p>
+                    </div>
+                    <div className="bg-secondary/30 rounded-lg p-2 text-center">
+                      <Clock className="h-3 w-3 mx-auto mb-0.5 text-muted-foreground" />
+                      <p className="text-xs font-mono font-bold">{p.avgRPE ?? '—'}</p>
+                      <p className="text-[9px] text-muted-foreground">RPE medio</p>
+                    </div>
+                  </div>
+
+                  {p.strengthTotal > 0 && (
+                    <div>
+                      <div className="flex justify-between items-center text-xs mb-1">
+                        <span className="text-muted-foreground">Fuerza</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold">{p.strengthTotal.toLocaleString()}</span>
+                          {prev && <DeltaIndicator current={p.strengthTotal} previous={prev.strengthTotal} />}
+                        </div>
+                      </div>
+                      <Progress value={(p.strengthTotal / maxStrength) * 100} className="h-2 bg-secondary" />
+                    </div>
+                  )}
+                  {p.isometricTotal > 0 && (
+                    <div>
+                      <div className="flex justify-between items-center text-xs mb-1">
+                        <span className="text-muted-foreground">Isométrico</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold">{Math.floor(p.isometricTotal / 60)}m</span>
+                          {prev && <DeltaIndicator current={p.isometricTotal} previous={prev.isometricTotal} />}
+                        </div>
+                      </div>
+                      <Progress value={(p.isometricTotal / maxIso) * 100} className="h-2 bg-secondary" />
+                    </div>
+                  )}
+                  {p.cardioTime > 0 && (
+                    <div className="text-xs text-muted-foreground flex items-center gap-1">
+                      Cardio: <span className="font-mono text-foreground font-bold">{Math.floor(p.cardioTime / 60)}m</span>
+                      {prev && <DeltaIndicator current={p.cardioTime} previous={prev.cardioTime} />}
+                    </div>
+                  )}
                 </div>
-                {p.strengthTotal > 0 && (
-                  <div>
-                    <div className="flex justify-between text-xs mb-1"><span className="text-muted-foreground">Fuerza</span><span className="font-mono font-bold">{p.strengthTotal.toLocaleString()}</span></div>
-                    <Progress value={(p.strengthTotal / maxStrength) * 100} className="h-2 bg-secondary" />
-                  </div>
-                )}
-                {p.isometricTotal > 0 && (
-                  <div>
-                    <div className="flex justify-between text-xs mb-1"><span className="text-muted-foreground">Isométrico</span><span className="font-mono font-bold">{Math.floor(p.isometricTotal / 60)}m</span></div>
-                    <Progress value={(p.isometricTotal / maxIso) * 100} className="h-2 bg-secondary" />
-                  </div>
-                )}
-                {p.cardioTime > 0 && <div className="text-xs text-muted-foreground">Cardio: <span className="font-mono text-foreground font-bold">{Math.floor(p.cardioTime / 60)}m</span></div>}
-              </div>
-            ))}
+              );
+            })}
             {periodData.every(p => p.sessionCount === 0) && <p className="text-center text-muted-foreground text-sm py-8">Sin datos en este período</p>}
           </div>
         </TabsContent>
