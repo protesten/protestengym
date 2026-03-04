@@ -73,7 +73,7 @@ export default function Programs() {
     mutationFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
-      const numWeeks = Math.max(1, Math.min(12, Number(weeks) || 4));
+      const numWeeks = Math.max(1, Math.min(30, Number(weeks) || 4));
       const dl = deloadWeek ? Number(deloadWeek) : null;
       const { data: prog, error } = await supabase.from('programs')
         .insert({ user_id: user.id, name, weeks: numWeeks, deload_week: dl, start_date: format(startDate, 'yyyy-MM-dd') } as any)
@@ -166,7 +166,7 @@ export default function Programs() {
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold">{selectedProgram.name}</h2>
-              <p className="text-xs text-muted-foreground">{selectedProgram.weeks} semanas{selectedProgram.deload_week ? ` · Deload sem. ${selectedProgram.deload_week}` : ''}</p>
+              <p className="text-xs text-muted-foreground">{selectedProgram.weeks} días{selectedProgram.deload_week ? ` · Deload día ${selectedProgram.deload_week}` : ''}</p>
             </div>
             <Button
               variant={selectedProgram.is_active ? 'default' : 'outline'}
@@ -204,13 +204,13 @@ export default function Programs() {
 
           {(() => {
             const sd = (selectedProgram as any).start_date;
-            const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
+                const currentWeek = sd ? Math.floor(differenceInDays(new Date(), new Date(sd + 'T00:00:00')) / 7) + 1 : null;
             const isValid = currentWeek && currentWeek >= 1 && currentWeek <= selectedProgram.weeks;
             const isFinished = currentWeek && currentWeek > selectedProgram.weeks;
-            return (
-              <div className={`p-2.5 rounded-xl border text-center text-xs font-bold ${isFinished ? 'bg-muted/50 border-border text-muted-foreground' : isValid ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-muted/50 border-border text-muted-foreground'}`}>
-                {isFinished ? '✅ Programa completado' : isValid ? `📍 Semana actual: ${currentWeek} de ${selectedProgram.weeks}` : sd ? 'Aún no ha comenzado' : 'Sin fecha de inicio'}
-              </div>
+              return (
+                <div className={`p-2.5 rounded-xl border text-center text-xs font-bold ${isFinished ? 'bg-muted/50 border-border text-muted-foreground' : isValid ? 'bg-primary/10 border-primary/20 text-primary' : 'bg-muted/50 border-border text-muted-foreground'}`}>
+                  {isFinished ? '✅ Programa completado' : isValid ? `📍 Semana actual: ${currentWeek}` : sd ? 'Aún no ha comenzado' : 'Sin fecha de inicio'}
+                </div>
             );
           })()}
 
@@ -240,7 +240,7 @@ export default function Programs() {
                 <div key={pw.id} className={`p-3 rounded-xl border ${isCurrent ? 'bg-primary/5 border-primary/30 ring-1 ring-primary/20' : isDeload ? 'bg-yellow-500/5 border-yellow-500/20' : 'bg-card border-border'}`}>
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-bold">
-                      Semana {pw.week_number}
+                      Día {pw.week_number}
                       {isCurrent && <span className="ml-2 text-[10px] text-primary font-semibold">← ACTUAL</span>}
                       {isDeload && <span className="ml-2 text-[10px] text-yellow-500 font-semibold">DELOAD</span>}
                     </span>
@@ -280,11 +280,11 @@ export default function Programs() {
               </div>
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Semanas</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">Días de entrenamiento</Label>
                   <Input inputMode="numeric" value={weeks} onChange={e => setWeeks(e.target.value)} placeholder="4" className="rounded-lg bg-secondary/50 border-border" />
                 </div>
                 <div>
-                  <Label className="text-xs font-semibold text-muted-foreground">Semana deload (opc.)</Label>
+                  <Label className="text-xs font-semibold text-muted-foreground">Día deload (opc.)</Label>
                   <Input inputMode="numeric" value={deloadWeek} onChange={e => setDeloadWeek(e.target.value)} placeholder="Ej: 4" className="rounded-lg bg-secondary/50 border-border" />
                 </div>
               </div>
@@ -333,7 +333,7 @@ export default function Programs() {
                     <span className="text-sm font-bold">{p.name}</span>
                     {p.is_active && <span className="text-[10px] font-semibold gradient-primary text-primary-foreground px-2 py-0.5 rounded-full">Activo</span>}
                   </div>
-                  <p className="text-xs text-muted-foreground">{p.weeks} semanas{p.deload_week ? ` · Deload sem. ${p.deload_week}` : ''}</p>
+                  <p className="text-xs text-muted-foreground">{p.weeks} días{p.deload_week ? ` · Deload día ${p.deload_week}` : ''}</p>
                 </button>
                 <div className="flex items-center gap-1">
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
