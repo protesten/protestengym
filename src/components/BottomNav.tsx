@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
-import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays } from 'lucide-react';
+import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 const mainItems = [
   { to: '/', icon: Home, label: 'Inicio' },
@@ -19,6 +20,7 @@ const moreItems = [
 
 export function BottomNav() {
   const { pathname } = useLocation();
+  const { signOut } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const moreActive = moreItems.some(({ to }) => pathname === to || (to !== '/' && pathname.startsWith(to)));
 
@@ -49,6 +51,13 @@ export function BottomNav() {
                 </Link>
               );
             })}
+            <button
+              onClick={() => { setMoreOpen(false); signOut(); }}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-destructive hover:bg-destructive/10 w-full"
+            >
+              <LogOut className="h-5 w-5" />
+              <span className="text-sm font-semibold">Cerrar sesión</span>
+            </button>
           </div>
         </div>
       )}
