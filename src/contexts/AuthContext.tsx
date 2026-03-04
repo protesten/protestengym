@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { lovable } from '@/integrations/lovable';
 import type { User, Session } from '@supabase/supabase-js';
@@ -34,11 +34,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
-  const signInWithGoogle = async () => {
-    await lovable.auth.signInWithOAuth('google', {
-      redirect_uri: window.location.origin,
-    });
-  };
+  const signInWithGoogle = useCallback(async () => {
+    try {
+      console.log('[Auth] Starting Google sign-in, origin:', window.location.origin);
+      const result = await lovable.auth.signInWithOAuth('google', {
+        redirect_uri: window.location.origin,
+      });
+      console.log('[Auth] Sign-in result:', JSON.stringify(result));
+      if (result?.error) {
+        console.error('[Auth] Sign-in error:', result.error);
+      }
+    } catch (err) {
+      console.error('[Auth] Sign-in exception:', err);
+    }
+  }, []);
 
   const signOut = async () => {
     await supabase.auth.signOut();
