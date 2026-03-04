@@ -5,12 +5,16 @@ import { getAllSessionSummaries, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
 import { StreakCard } from '@/components/StreakCard';
 import { TodayRoutineSuggestion } from '@/components/TodayRoutineSuggestion';
-import { Play, Zap, Calendar, TrendingUp, Dumbbell } from 'lucide-react';
+import { Play, Zap, Calendar, TrendingUp, Dumbbell, Trash2, CalendarDays } from 'lucide-react';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { deleteSession as deleteSessionApi } from '@/lib/api';
 import { useState, useEffect } from 'react';
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
 export default function Index() {
+  const queryClient = useQueryClient();
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const { data: routines } = useQuery({ queryKey: ['routines'], queryFn: getRoutines });
   const { data: sessions } = useQuery({ queryKey: ['sessions'], queryFn: getSessions });
@@ -139,20 +143,51 @@ export default function Index() {
       {/* Recent Sessions */}
       {sessions && sessions.length > 0 && (
         <div>
-          <h3 className="text-sm font-bold mb-3 flex items-center gap-2">
-            <Dumbbell className="h-4 w-4 text-primary" />
-            Sesiones Recientes
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-bold flex items-center gap-2">
+              <Dumbbell className="h-4 w-4 text-primary" />
+              Sesiones Recientes
+            </h3>
+            <Link to="/calendar" className="text-xs text-primary font-semibold flex items-center gap-1">
+              <CalendarDays className="h-3.5 w-3.5" />
+              Calendario
+            </Link>
+          </div>
           <div className="space-y-2">
-            {sessions.slice(0, 3).map(s => (
-              <Link key={s.id} to={`/session/${s.id}`} className="block">
-                <div className="rounded-xl bg-card border border-border p-3 hover:border-primary/30 transition-colors">
+            {sessions.slice(0, 5).map(s => (
+              <div key={s.id} className="rounded-xl bg-card border border-border p-3 flex items-center justify-between gap-2">
+                <Link to={`/session/${s.id}`} className="flex-1 min-w-0">
                   <div className="flex justify-between items-center">
                     <span className="text-sm font-semibold">{s.date}</span>
-                    <span className="text-xs text-muted-foreground">{s.notes ? s.notes.slice(0, 30) : 'Sin notas'}</span>
+                    <span className="text-xs text-muted-foreground truncate ml-2">{s.notes ? s.notes.slice(0, 30) : 'Sin notas'}</span>
                   </div>
-                </div>
-              </Link>
+                </Link>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive">
+                      <Trash2 className="h-3.5 w-3.5" />
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent className="bg-card border-border rounded-2xl">
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
+                      <AlertDialogDescription>Se borrarán todos los ejercicios y series. No se puede deshacer.</AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-destructive text-destructive-foreground"
+                        onClick={async () => {
+                          await deleteSessionApi(s.id);
+                          queryClient.invalidateQueries({ queryKey: ['sessions'] });
+                        }}
+                      >
+                        Eliminar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
+              </div>
             ))}
           </div>
         </div>
