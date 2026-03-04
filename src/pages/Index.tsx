@@ -5,7 +5,7 @@ import { getAllSessionSummaries, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
 import { StreakCard } from '@/components/StreakCard';
 import { TodayRoutineSuggestion } from '@/components/TodayRoutineSuggestion';
-import { Play, Zap, Calendar, TrendingUp, Dumbbell, Trash2, CalendarDays } from 'lucide-react';
+import { Play, Zap, Calendar, TrendingUp, Dumbbell, Trash2, CalendarDays, Pencil } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteSession as deleteSessionApi } from '@/lib/api';
@@ -161,6 +161,11 @@ export default function Index() {
                     <span className="text-sm font-semibold">{s.date}</span>
                     <span className="text-xs text-muted-foreground truncate ml-2">{s.notes ? s.notes.slice(0, 30) : 'Sin notas'}</span>
                   </div>
+                </Link>
+                <Link to={`/session/${s.id}`}>
+                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary">
+                    <Pencil className="h-3.5 w-3.5" />
+                  </Button>
                 </Link>
                 <AlertDialog>
                   <AlertDialogTrigger asChild>
