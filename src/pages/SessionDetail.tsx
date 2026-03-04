@@ -208,12 +208,45 @@ export default function SessionDetail() {
     onSuccess: () => { setAddExId(''); invalidateSession(); },
   });
 
-  const addSetMutation = useMutation({ mutationFn: (seId: string) => createSet(seId), onSuccess: () => invalidateSession() });
+  const setsQueryKey = ['sets', sessionId];
+
+  const addSetMutation = useMutation({
+    mutationFn: (seId: string) => createSet(seId),
+    onMutate: async (seId: string) => {
+      await queryClient.cancelQueries({ queryKey: setsQueryKey });
+      const prev = queryClient.getQueryData<WorkoutSet[]>(setsQueryKey);
+      const optimisticSet: WorkoutSet = {
+        id: `temp-${Date.now()}`,
+        session_exercise_id: seId,
+        set_type: 'work',
+        weight: null,
+        reps: null,
+        duration_seconds: null,
+        distance_meters: null,
+        rpe: null,
+        created_at: new Date().toISOString(),
+      };
+      queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old => [...(old ?? []), optimisticSet]);
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => { if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev); },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: setsQueryKey }),
+  });
+
   const [prSets, setPrSets] = useState<Set<string>>(new Set());
   const updateSetMutation = useMutation({
-    mutationFn: async ({ setId, data, exerciseId }: { setId: string; data: Partial<WorkoutSet>; exerciseId?: string }) => {
-      await updateSetApi(setId, data);
-      // Check for PR after updating weight/reps
+    mutationFn: ({ setId, data }: { setId: string; data: Partial<WorkoutSet>; exerciseId?: string }) => updateSetApi(setId, data),
+    onMutate: async ({ setId, data }) => {
+      await queryClient.cancelQueries({ queryKey: setsQueryKey });
+      const prev = queryClient.getQueryData<WorkoutSet[]>(setsQueryKey);
+      queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old =>
+        (old ?? []).map(s => s.id === setId ? { ...s, ...data } : s)
+      );
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => { if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev); },
+    onSuccess: async (_res, { setId, data, exerciseId }) => {
+      // Check for PR in onSuccess (non-blocking)
       if (exerciseId && (data.weight != null || data.reps != null || data.duration_seconds != null || data.distance_meters != null)) {
         const currentSet = allSets?.find(s => s.id === setId);
         if (currentSet) {
@@ -230,9 +263,21 @@ export default function SessionDetail() {
         }
       }
     },
-    onSuccess: () => invalidateSession(),
+    onSettled: () => queryClient.invalidateQueries({ queryKey: setsQueryKey }),
   });
-  const deleteSetMutation = useMutation({ mutationFn: deleteSetApi, onSuccess: () => invalidateSession() });
+
+  const deleteSetMutation = useMutation({
+    mutationFn: deleteSetApi,
+    onMutate: async (setId: string) => {
+      await queryClient.cancelQueries({ queryKey: setsQueryKey });
+      const prev = queryClient.getQueryData<WorkoutSet[]>(setsQueryKey);
+      queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old => (old ?? []).filter(s => s.id !== setId));
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => { if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev); },
+    onSettled: () => queryClient.invalidateQueries({ queryKey: setsQueryKey }),
+  });
+
   const deleteSeMutation = useMutation({ mutationFn: deleteSeApi, onSuccess: () => { toast.success('Ejercicio eliminado'); invalidateSession(); } });
 
   const moveExMutation = useMutation({
