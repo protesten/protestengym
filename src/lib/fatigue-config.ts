@@ -96,10 +96,9 @@ export interface SessionData {
   }[];
 }
 
-export function computeFatigue(sessions: SessionData[]): Map<number, number> {
+export function computeFatigue(sessions: SessionData[], asOfTimestamp?: number): Map<number, number> {
   const fatigue = new Map<number, number>();
-  const now = Date.now();
-
+  const now = asOfTimestamp ?? Date.now();
   for (const session of sessions) {
     const sessionTime = new Date(session.date + 'T12:00:00').getTime();
     const hoursAgo = (now - sessionTime) / 3_600_000;

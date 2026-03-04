@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { BodyHeatmap } from '@/components/BodyHeatmap';
+import { FatigueHistory } from '@/components/FatigueHistory';
 import { supabase } from '@/integrations/supabase/client';
 import {
   computeFatigue,
@@ -20,6 +21,7 @@ export default function Fatigue() {
   const [loading, setLoading] = useState(true);
   const [fatigue, setFatigue] = useState<Map<number, number>>(new Map());
   const [muscleNames, setMuscleNames] = useState<Map<number, string>>(new Map());
+  const [sessionDataArr, setSessionDataArr] = useState<SessionData[]>([]);
   const [showDeload, setShowDeload] = useState(false);
 
   useEffect(() => {
@@ -28,13 +30,11 @@ export default function Fatigue() {
 
   async function loadFatigueData() {
     try {
-      // Load muscles
       const { data: muscles } = await supabase.from('muscles').select('id, name');
       const nameMap = new Map<number, string>();
       (muscles ?? []).forEach(m => nameMap.set(m.id, m.name));
       setMuscleNames(nameMap);
 
-      // Load sessions from last 14 days
       const fourteenDaysAgo = new Date();
       fourteenDaysAgo.setDate(fourteenDaysAgo.getDate() - 14);
       const dateStr = fourteenDaysAgo.toISOString().split('T')[0];
@@ -50,7 +50,6 @@ export default function Fatigue() {
         return;
       }
 
-      // Load all exercises (personal + predefined) for muscle mappings
       const [{ data: personalEx }, { data: predefinedEx }] = await Promise.all([
         supabase.from('exercises').select('id, primary_muscle_ids, secondary_muscle_ids'),
         supabase.from('predefined_exercises').select('id, primary_muscle_ids, secondary_muscle_ids'),
@@ -63,7 +62,6 @@ export default function Fatigue() {
         });
       });
 
-      // Load session_exercises and sets for each session
       const sessionIds = sessions.map(s => s.id);
       const { data: sessionExercises } = await supabase
         .from('session_exercises')
@@ -73,7 +71,6 @@ export default function Fatigue() {
       const seIds = (sessionExercises ?? []).map(se => se.id);
       let allSets: any[] = [];
       if (seIds.length > 0) {
-        // Batch in chunks of 100 to avoid query limits
         for (let i = 0; i < seIds.length; i += 100) {
           const chunk = seIds.slice(i, i + 100);
           const { data: sets } = await supabase
@@ -84,7 +81,6 @@ export default function Fatigue() {
         }
       }
 
-      // Group sets by session_exercise_id
       const setsBySE = new Map<string, any[]>();
       allSets.forEach(s => {
         const arr = setsBySE.get(s.session_exercise_id) ?? [];
@@ -92,7 +88,6 @@ export default function Fatigue() {
         setsBySE.set(s.session_exercise_id, arr);
       });
 
-      // Build SessionData[]
       const sessionDataMap = new Map<string, SessionData>();
       sessions.forEach(s => sessionDataMap.set(s.id, { date: s.date, exercises: [] }));
 
@@ -112,11 +107,11 @@ export default function Fatigue() {
         });
       });
 
-      const sessionDataArr = Array.from(sessionDataMap.values());
-      const computed = computeFatigue(sessionDataArr);
+      const arr = Array.from(sessionDataMap.values());
+      setSessionDataArr(arr);
+      const computed = computeFatigue(arr);
       setFatigue(computed);
 
-      // Deload check: average fatigue of trained muscles > 70%
       if (computed.size > 0) {
         const vals = Array.from(computed.values());
         const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
@@ -129,14 +124,12 @@ export default function Fatigue() {
     }
   }
 
-  // Critical muscles: orange or red
   const criticalMuscles = Array.from(fatigue.entries())
     .filter(([, pct]) => pct > 60)
     .sort((a, b) => b[1] - a[1]);
 
   return (
     <div className="max-w-lg mx-auto px-4 py-6 space-y-4">
-      {/* Header */}
       <div className="flex items-center gap-3">
         <button onClick={() => navigate(-1)} className="text-muted-foreground hover:text-foreground">
           <ArrowLeft className="h-5 w-5" />
@@ -151,10 +144,10 @@ export default function Fatigue() {
         <div className="space-y-4">
           <Skeleton className="h-[300px] w-full rounded-xl" />
           <Skeleton className="h-24 w-full rounded-xl" />
+          <Skeleton className="h-[260px] w-full rounded-xl" />
         </div>
       ) : (
         <>
-          {/* Deload banner */}
           {showDeload && (
             <Card className="border-destructive bg-destructive/10">
               <CardContent className="p-4 flex items-start gap-3">
@@ -169,7 +162,6 @@ export default function Fatigue() {
             </Card>
           )}
 
-          {/* Heatmap */}
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base">Mapa de Fatiga</CardTitle>
@@ -185,7 +177,9 @@ export default function Fatigue() {
             </CardContent>
           </Card>
 
-          {/* Critical Muscles */}
+          {/* Weekly Fatigue History Chart */}
+          <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} />
+
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="text-base flex items-center gap-2">
@@ -200,7 +194,6 @@ export default function Fatigue() {
                 <div className="space-y-3">
                   {criticalMuscles.map(([id, pct]) => {
                     const hours = estimateRecoveryHours(pct, id);
-                    const level = fatigueLevel(pct);
                     return (
                       <div key={id} className="space-y-1">
                         <div className="flex items-center justify-between">
@@ -218,9 +211,7 @@ export default function Fatigue() {
                         <Progress
                           value={Math.round(pct)}
                           className="h-1.5"
-                          style={{
-                            ['--progress-color' as any]: fatigueColor(pct),
-                          }}
+                          style={{ ['--progress-color' as any]: fatigueColor(pct) }}
                         />
                       </div>
                     );
@@ -230,7 +221,6 @@ export default function Fatigue() {
             </CardContent>
           </Card>
 
-          {/* All muscles summary */}
           {fatigue.size > 0 && (
             <Card>
               <CardHeader className="pb-2">
