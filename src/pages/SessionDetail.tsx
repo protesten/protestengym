@@ -172,6 +172,7 @@ export default function SessionDetail() {
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
   const [showExportCard, setShowExportCard] = useState(false);
+  const [datePopoverOpen, setDatePopoverOpen] = useState(false);
   const exportCardRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (session) setNotes(session.notes ?? ''); }, [session]);
@@ -298,15 +299,15 @@ export default function SessionDetail() {
       </button>
 
       <div className="flex items-center justify-between mb-2">
-        <Popover>
+        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
           <PopoverTrigger asChild>
             <Button variant="ghost" className="text-xl font-black px-2 h-auto py-1 gap-2 hover:bg-secondary/50">
               Sesión {session.date}
               <CalendarIcon className="h-4 w-4 text-primary" />
             </Button>
           </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-card border-border rounded-xl" align="start">
-            <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); } }} initialFocus className={cn("p-3 pointer-events-auto")} />
+          <PopoverContent className="w-auto p-0 bg-card border-border rounded-xl pointer-events-auto" align="start" sideOffset={4}>
+            <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); setDatePopoverOpen(false); } }} initialFocus className={cn("p-3 pointer-events-auto")} />
           </PopoverContent>
         </Popover>
         <div className="flex gap-1">
