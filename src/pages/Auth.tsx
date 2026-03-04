@@ -18,15 +18,13 @@ export default function Auth() {
 
   if (user) return <Navigate to="/" replace />;
 
-  const handleGoogleClick = async () => {
+  const handleGoogleClick = () => {
     console.log('[Auth] Button clicked');
     setSigningIn(true);
-    try {
-      await signInWithGoogle();
-    } catch (e) {
+    signInWithGoogle().catch((e) => {
       console.error('[Auth] Error:', e);
       setSigningIn(false);
-    }
+    });
   };
 
   return (
@@ -44,7 +42,8 @@ export default function Auth() {
       
       <Button 
         size="lg" 
-        className="w-full max-w-sm h-14 text-lg gap-3 rounded-xl bg-card border border-border hover:border-primary/50 hover:bg-card/80 text-foreground transition-all" 
+        className="relative z-10 w-full max-w-sm h-14 text-lg gap-3 rounded-xl bg-card border border-border hover:border-primary/50 hover:bg-card/80 text-foreground transition-all touch-action-manipulation" 
+        style={{ touchAction: 'manipulation' }}
         onClick={handleGoogleClick}
         disabled={signingIn}
       >
