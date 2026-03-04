@@ -1,83 +1,47 @@
 
 
-## Creación Inline de Ejercicios + Sistema de Músculos Activables
+## Rediseño de la Pantalla de Sesión de Entrenamiento
 
-### Concepto
+### Problemas identificados
+1. La UI está saturada: cada fila de serie muestra badges de RPE pautado (@10), rangos pautados (10-15r), selector de tipo de serie, delta badges, todo en una línea — demasiada información visual.
+2. La `WarmupCalculator` se reemplaza por una calculadora de peso sugerido basada en histórico.
+3. Los datos de sesión anterior no cargan correctamente — la query `getPreviousSetsForExercise` usa `.order('sessions(date)')` que puede fallar en Supabase (ordering by joined table).
+4. La referencia de sesión anterior ocupa mucho espacio vertical.
 
-En lugar de crear músculos nuevos, el sistema tendrá una **lista maestra completa de todos los músculos posibles** ya en la base de datos. Los músculos estarán **deshabilitados por defecto** y el usuario podrá **activarlos** cuando los necesite para un ejercicio. El heatmap SVG solo mostrará músculos activos (los que aparecen en al menos un ejercicio del usuario o en predefinidos).
+### Cambios propuestos
 
-### Cambios
+**1. Simplificar `SetRow`** (`SessionDetail.tsx`)
+- Eliminar `PlannedRangeBadge` completamente (los rangos pautados ya están como placeholder en los inputs).
+- Eliminar el badge de RPE pautado (`@10` naranja) — el RPE pautado se muestra solo como placeholder en el selector.
+- Eliminar los `DeltaBadge` inline por serie (las flechas de tendencia). Mantener solo el borde lateral de color como indicador.
+- Hacer el selector de tipo de serie más compacto: en vez de dropdown, usar un chip de texto corto ("T" para Trabajo, "C" para Calentamiento, "A" para Aproximación) con un tap para ciclar entre tipos.
+- Resultado: cada fila tiene solo `[chip tipo] [input peso] [input reps] [RPE selector] [🗑️]` — mucho más limpio.
 
-**1. DB Migration: Ampliar tabla `muscles`**
+**2. Compactar la referencia de sesión anterior** (`PreviousSessionReference.tsx`)
+- Cambiar de lista vertical a una línea resumen compacta por serie, inline debajo del header del ejercicio, tipo: `Anterior (4 mar): 80kg×12, 85kg×10, 85kg×8`.
+- Ocupar una sola línea en vez del bloque actual.
 
-Añadir columnas a `muscles`:
-- `recovery_category` (text, default `'medium'`): `'fast'` | `'medium'` | `'slow'` — para cálculos de fatiga
-- `body_region` (text, nullable): agrupación visual (pecho, espalda, etc.)
-- `is_active` (boolean, default `true`): si el músculo está habilitado para uso
+**3. Reemplazar `WarmupCalculator` por `WeightSuggestion`**
+- Eliminar `WarmupCalculator` del proyecto.
+- Crear un nuevo componente que, dado el ejercicio y su historial, sugiera el peso para la siguiente serie usando la media de las últimas sesiones.
+- Mostrar como un icono de "calculadora" que al pulsar muestra un popover con el peso sugerido y un botón para aplicarlo al input.
 
-Poblar `recovery_category` con los datos actuales de `fatigue-config.ts` (UPDATE masivo para los 49 músculos existentes).
+**4. Fix carga de datos de sesión anterior**
+- El query actual usa `.order('sessions(date)', { ascending: false })` que puede no funcionar correctamente. Cambiar a un approach más fiable: buscar las session_exercises del ejercicio, hacer join con sessions para obtener la fecha, y ordenar por fecha en el lado del cliente, o usar un sub-select/RPC.
 
-Insertar músculos adicionales comunes que no están en el sistema (ej: Psoas, Supraespinoso, Piriforme, etc.) con `is_active = false`.
+**5. Simplificar header de ejercicio**
+- Reducir los botones de reordenar (▲▼) a solo iconos más pequeños o swipe.
+- Agrupar los iconos de acción (notas, peso sugerido, eliminar) de forma más compacta.
 
-Añadir RLS policy para UPDATE por usuarios autenticados (para poder activar/desactivar).
-
-No se necesita INSERT ya que la lista maestra viene precargada.
-
-**2. `src/lib/api.ts`**: Nuevas funciones
-- `getActiveMuscles()`: músculos con `is_active = true`
-- `getAllMusclesIncludingInactive()`: todos los músculos (para la pantalla de activación)
-- `toggleMuscleActive(id, isActive)`: actualizar `is_active`
-
-**3. `src/components/CreateExerciseDialog.tsx`** (nuevo)
-- Componente reutilizable con formulario de ejercicio (nombre, tracking type, músculos primarios/secundarios)
-- Usado desde `ExerciseSearchSelect` y `Exercises.tsx`
-- Props: `open`, `onOpenChange`, `onCreated(exercise)`
-
-**4. `src/components/ExerciseSearchSelect.tsx`**: Añadir "Crear ejercicio"
-- Opción al final de la lista / cuando no hay resultados
-- Abre `CreateExerciseDialog`
-- Auto-selecciona el ejercicio creado y lo añade
-
-**5. `src/components/MuscleSelect.tsx`**: Añadir "Activar más músculos"
-- Botón al final de la lista que abre un dialog/panel mostrando músculos inactivos
-- Permite activar músculos con un toggle
-- Al activar, el músculo aparece disponible en el selector
-
-**6. `src/components/MuscleActivationDialog.tsx`** (nuevo)
-- Muestra todos los músculos inactivos agrupados por `body_region`
-- Toggle para activar/desactivar
-- Muestra info: nombre, categoría de recuperación
-
-**7. `src/lib/fatigue-config.ts`**: Hacer dinámico
-- `computeFatigue` acepta un mapa `muscleId → recovery_category` desde la DB
-- Fallback a `'medium'` para IDs sin categoría
-- Eliminar el hardcoded `MUSCLE_RECOVERY` como fuente principal (mantener como fallback)
-
-**8. `src/components/BodyHeatmap.tsx`**: Filtrar por músculos activos
-- Recibir prop `activeMuscleIds: Set<number>` (músculos presentes en ejercicios del usuario)
-- Solo renderizar regiones SVG cuyos IDs intersecten con `activeMuscleIds`
-- Los SVG paths de los 49 músculos actuales se mantienen hardcodeados (no tiene sentido moverlos a DB)
-
-**9. `src/pages/Fatigue.tsx`**: Adaptar
-- Cargar `recovery_category` desde muscles de la DB
-- Pasar `activeMuscleIds` al heatmap
-- Construir mapa de recovery desde DB en lugar del hardcoded
-
-**10. `src/pages/Exercises.tsx`**: Refactorizar
-- Usar `CreateExerciseDialog` compartido en lugar del form inline
+**6. Eliminar archivo `WarmupCalculator.tsx`**
 
 ### Archivos afectados
 
 | Archivo | Acción |
 |---|---|
-| DB `muscles` | Migración: columnas + datos + RLS UPDATE |
-| `src/lib/api.ts` | Funciones para músculos activos/inactivos |
-| `src/lib/fatigue-config.ts` | Recovery dinámico desde DB |
-| `src/components/CreateExerciseDialog.tsx` | Nuevo |
-| `src/components/MuscleActivationDialog.tsx` | Nuevo |
-| `src/components/MuscleSelect.tsx` | Botón "Activar más" |
-| `src/components/ExerciseSearchSelect.tsx` | Opción "Crear ejercicio" |
-| `src/components/BodyHeatmap.tsx` | Filtrar por activos |
-| `src/pages/Fatigue.tsx` | Recovery dinámico + filtro activos |
-| `src/pages/Exercises.tsx` | Refactorizar con dialog compartido |
+| `src/pages/SessionDetail.tsx` | Rediseño mayor: simplificar SetRow, eliminar badges, nuevo layout compacto |
+| `src/components/PreviousSessionReference.tsx` | Formato compacto en una línea |
+| `src/components/WarmupCalculator.tsx` | Eliminar |
+| `src/components/WeightSuggestion.tsx` | Nuevo: calculadora de peso basada en historial |
+| `src/lib/api.ts` | Fix query de sesión anterior + nueva función para historial de pesos |
 
