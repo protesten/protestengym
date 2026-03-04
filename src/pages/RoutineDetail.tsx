@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRoutines, getRoutineExercises, getAllExercises, addRoutineExercise, deleteRoutineExercise, updateRoutineExercise, type AnyExercise } from '@/lib/api';
-import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type PlannedSet } from '@/lib/constants';
+import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type PlannedSet, type TrackingType } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -10,9 +10,22 @@ import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ArrowLeft, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { toast } from 'sonner';
 
-const DEFAULT_PLANNED_SET: PlannedSet = { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12 };
+const DEFAULT_PLANNED_SET: PlannedSet = { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
 
-function PlannedSetRow({ ps, index, onChange, onDelete }: { ps: PlannedSet; index: number; onChange: (ps: PlannedSet) => void; onDelete: () => void }) {
+function getDefaultPlannedSet(trackingType: TrackingType): PlannedSet {
+  switch (trackingType) {
+    case 'time_only':
+      return { set_type: 'work', rpe: 8, min_reps: null, max_reps: null, min_time_seconds: 30, max_time_seconds: 60, min_distance_meters: null, max_distance_meters: null };
+    case 'distance_time':
+      return { set_type: 'work', rpe: 8, min_reps: null, max_reps: null, min_time_seconds: 60, max_time_seconds: 120, min_distance_meters: 100, max_distance_meters: 200 };
+    case 'reps_only':
+      return { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
+    default:
+      return { ...DEFAULT_PLANNED_SET };
+  }
+}
+
+function PlannedSetRow({ ps, index, trackingType, onChange, onDelete }: { ps: PlannedSet; index: number; trackingType: TrackingType; onChange: (ps: PlannedSet) => void; onDelete: () => void }) {
   return (
     <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/30">
       <span className="text-xs text-muted-foreground w-6 shrink-0 font-bold">S{index + 1}</span>
@@ -24,9 +37,37 @@ function PlannedSetRow({ ps, index, onChange, onDelete }: { ps: PlannedSet; inde
         <SelectTrigger className="w-20 h-7 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
         <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
       </Select>
-      <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
-      <span className="text-xs text-muted-foreground">-</span>
-      <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
+
+      {/* Reps fields for weight_reps and reps_only */}
+      {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
+        <>
+          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
+          <span className="text-xs text-muted-foreground">-</span>
+          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
+          <span className="text-[10px] text-muted-foreground">reps</span>
+        </>
+      )}
+
+      {/* Time fields for time_only and distance_time */}
+      {(trackingType === 'time_only' || trackingType === 'distance_time') && (
+        <>
+          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
+          <span className="text-xs text-muted-foreground">-</span>
+          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
+          <span className="text-[10px] text-muted-foreground">seg</span>
+        </>
+      )}
+
+      {/* Distance fields for distance_time */}
+      {trackingType === 'distance_time' && (
+        <>
+          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
+          <span className="text-xs text-muted-foreground">-</span>
+          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
+          <span className="text-[10px] text-muted-foreground">m</span>
+        </>
+      )}
+
       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
   );
@@ -70,7 +111,11 @@ export default function RoutineDetail() {
   });
 
   const getPlannedSets = (re: any): PlannedSet[] => { const ps = re.planned_sets; if (Array.isArray(ps)) return ps; return []; };
-  const handleAddPlannedSet = (reId: string, current: PlannedSet[]) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, { ...DEFAULT_PLANNED_SET }] }); };
+  const getExerciseTrackingType = (exerciseId: string): TrackingType => {
+    const ex = exercises?.find(e => e.id === exerciseId);
+    return (ex?.tracking_type as TrackingType) ?? 'weight_reps';
+  };
+  const handleAddPlannedSet = (reId: string, current: PlannedSet[], trackingType: TrackingType) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, getDefaultPlannedSet(trackingType)] }); };
   const handleUpdatePlannedSet = (reId: string, current: PlannedSet[], index: number, updated: PlannedSet) => { const next = [...current]; next[index] = updated; updatePlannedSetsMutation.mutate({ reId, plannedSets: next }); };
   const handleDeletePlannedSet = (reId: string, current: PlannedSet[], index: number) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: current.filter((_, i) => i !== index) }); };
 
@@ -93,6 +138,7 @@ export default function RoutineDetail() {
       <div className="space-y-3">
         {routineExercises?.map((re, i) => {
           const plannedSets = getPlannedSets(re);
+          const trackingType = getExerciseTrackingType(re.exercise_id);
           return (
             <div key={re.id} className="p-3 rounded-xl bg-card border border-border">
               <div className="flex items-center gap-2">
@@ -104,9 +150,9 @@ export default function RoutineDetail() {
               </div>
               <div className="mt-2 ml-6 space-y-1.5">
                 {plannedSets.map((ps, j) => (
-                  <PlannedSetRow key={j} ps={ps} index={j} onChange={updated => handleUpdatePlannedSet(re.id, plannedSets, j, updated)} onDelete={() => handleDeletePlannedSet(re.id, plannedSets, j)} />
+                  <PlannedSetRow key={j} ps={ps} index={j} trackingType={trackingType} onChange={updated => handleUpdatePlannedSet(re.id, plannedSets, j, updated)} onDelete={() => handleDeletePlannedSet(re.id, plannedSets, j)} />
                 ))}
-                <Button variant="outline" size="sm" className="mt-1.5 w-full text-xs h-7 rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => handleAddPlannedSet(re.id, plannedSets)}>
+                <Button variant="outline" size="sm" className="mt-1.5 w-full text-xs h-7 rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType)}>
                   <Plus className="h-3 w-3 mr-1" />Añadir serie
                 </Button>
               </div>

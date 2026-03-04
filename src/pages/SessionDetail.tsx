@@ -47,15 +47,42 @@ function NumericInput({ value, placeholder, className, onSave, hint }: { value: 
   );
 }
 
-function RepRangeBadge({ plannedSet }: { plannedSet?: PlannedSet }) {
-  if (!plannedSet || (plannedSet.min_reps == null && plannedSet.max_reps == null)) return null;
-  const range = plannedSet.min_reps != null && plannedSet.max_reps != null
-    ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
-    : plannedSet.min_reps != null ? `${plannedSet.min_reps}+` : `≤${plannedSet.max_reps}`;
+function PlannedRangeBadge({ plannedSet, trackingType }: { plannedSet?: PlannedSet; trackingType: TrackingType }) {
+  if (!plannedSet) return null;
+
+  const badges: { range: string; unit: string }[] = [];
+
+  if ((trackingType === 'weight_reps' || trackingType === 'reps_only') && (plannedSet.min_reps != null || plannedSet.max_reps != null)) {
+    const range = plannedSet.min_reps != null && plannedSet.max_reps != null
+      ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
+      : plannedSet.min_reps != null ? `${plannedSet.min_reps}+` : `≤${plannedSet.max_reps}`;
+    badges.push({ range, unit: 'r' });
+  }
+
+  if ((trackingType === 'time_only' || trackingType === 'distance_time') && (plannedSet.min_time_seconds != null || plannedSet.max_time_seconds != null)) {
+    const range = plannedSet.min_time_seconds != null && plannedSet.max_time_seconds != null
+      ? `${plannedSet.min_time_seconds}-${plannedSet.max_time_seconds}`
+      : plannedSet.min_time_seconds != null ? `${plannedSet.min_time_seconds}+` : `≤${plannedSet.max_time_seconds}`;
+    badges.push({ range, unit: 's' });
+  }
+
+  if (trackingType === 'distance_time' && (plannedSet.min_distance_meters != null || plannedSet.max_distance_meters != null)) {
+    const range = plannedSet.min_distance_meters != null && plannedSet.max_distance_meters != null
+      ? `${plannedSet.min_distance_meters}-${plannedSet.max_distance_meters}`
+      : plannedSet.min_distance_meters != null ? `${plannedSet.min_distance_meters}+` : `≤${plannedSet.max_distance_meters}`;
+    badges.push({ range, unit: 'm' });
+  }
+
+  if (badges.length === 0) return null;
+
   return (
-    <span className="text-[10px] font-mono text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded shrink-0" title="Rango pautado">
-      {range}r
-    </span>
+    <div className="flex gap-1 shrink-0">
+      {badges.map((b, i) => (
+        <span key={i} className="text-[10px] font-mono text-primary/70 bg-primary/10 px-1.5 py-0.5 rounded" title="Rango pautado">
+          {b.range}{b.unit}
+        </span>
+      ))}
+    </div>
   );
 }
 
@@ -81,6 +108,12 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
   const repsPlaceholder = plannedSet && plannedSet.min_reps != null && plannedSet.max_reps != null
     ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
     : 'reps';
+  const timePlaceholder = plannedSet && (plannedSet as any).min_time_seconds != null && (plannedSet as any).max_time_seconds != null
+    ? `${(plannedSet as any).min_time_seconds}-${(plannedSet as any).max_time_seconds}`
+    : 'seg';
+  const distancePlaceholder = plannedSet && (plannedSet as any).min_distance_meters != null && (plannedSet as any).max_distance_meters != null
+    ? `${(plannedSet as any).min_distance_meters}-${(plannedSet as any).max_distance_meters}`
+    : 'm';
 
   // Build hints from previous session
   const weightHint = prevSet?.weight != null ? `${prevSet.weight}` : undefined;
@@ -146,15 +179,15 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
       )}
       {trackingType === 'time_only' && (
         <>
-          <NumericInput value={set.duration_seconds} placeholder="seg" className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
+          <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
           <DeltaBadge current={set.duration_seconds} previous={prevSet?.duration_seconds} />
         </>
       )}
       {trackingType === 'distance_time' && (
         <>
-          <NumericInput value={set.duration_seconds} placeholder="seg" className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
+          <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} hint={durationHint} />
           <DeltaBadge current={set.duration_seconds} previous={prevSet?.duration_seconds} />
-          <NumericInput value={set.distance_meters} placeholder="m" className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} hint={distanceHint} />
+          <NumericInput value={set.distance_meters} placeholder={distancePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} hint={distanceHint} />
           <DeltaBadge current={set.distance_meters} previous={prevSet?.distance_meters} />
         </>
       )}
@@ -169,7 +202,7 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
           </span>
         )}
       </div>
-      <RepRangeBadge plannedSet={plannedSet} />
+      <PlannedRangeBadge plannedSet={plannedSet} trackingType={trackingType} />
       <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
   );
