@@ -14,6 +14,7 @@ import { MeasurementChart } from '@/components/measurements/MeasurementChart';
 import { MeasurementCard } from '@/components/measurements/MeasurementCard';
 import { FIELD_SECTIONS, ALL_FIELDS } from '@/components/measurements/fields';
 import { ChevronDown } from 'lucide-react';
+import { AnthropometricAnalysis } from '@/components/measurements/AnthropometricAnalysis';
 
 export default function Measurements() {
   const queryClient = useQueryClient();
@@ -72,6 +73,9 @@ export default function Measurements() {
         <Ruler className="h-5 w-5 text-primary" />
         Medidas Corporales
       </h1>
+
+      {/* Anthropometric Analysis */}
+      <AnthropometricAnalysis latestMeasurement={measurements?.[0] ?? null} />
 
       {/* Chart */}
       <MeasurementChart measurements={measurements} />
