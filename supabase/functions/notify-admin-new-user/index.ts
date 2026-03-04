@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
               Authorization: `Bearer ${resendApiKey}`,
             },
             body: JSON.stringify({
-              from: Deno.env.get("NOTIFICATION_FROM_EMAIL") || "ProtestenGym <notifications@protestengym.lovable.app>",
+              from: "ProtestenGym <notifications@gym.protesten.com>",
               to: [adminEmail],
               subject: `Nuevo usuario pendiente: ${newUserName}`,
               html: `
