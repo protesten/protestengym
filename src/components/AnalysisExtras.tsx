@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Target, TrendingUp, Info, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function setsColor(sets: number): string {
   if (sets < 10) return 'bg-red-500';
@@ -27,18 +28,22 @@ interface VolumeProps {
 
 export function WeeklyMuscleVolume({ dateRange }: VolumeProps) {
   const [data, setData] = useState<WeeklyMuscleSets[]>([]);
+  const [loading, setLoading] = useState(true);
   const [weeksBack, setWeeksBack] = useState(0);
   const [prevData, setPrevData] = useState<WeeklyMuscleSets[]>([]);
 
   const hasCustomRange = !!dateRange;
 
   useEffect(() => {
+    setLoading(true);
     if (hasCustomRange) {
-      getWeeklyMuscleSets(0, dateRange).then(setData);
+      getWeeklyMuscleSets(0, dateRange).then(setData).finally(() => setLoading(false));
       setPrevData([]);
     } else {
-      getWeeklyMuscleSets(weeksBack).then(setData);
-      getWeeklyMuscleSets(weeksBack + 1).then(setPrevData);
+      Promise.all([
+        getWeeklyMuscleSets(weeksBack).then(setData),
+        getWeeklyMuscleSets(weeksBack + 1).then(setPrevData),
+      ]).finally(() => setLoading(false));
     }
   }, [weeksBack, dateRange]);
 
@@ -80,7 +85,11 @@ export function WeeklyMuscleVolume({ dateRange }: VolumeProps) {
         </p>
       </div>
 
-      {data.length === 0 ? (
+      {loading ? (
+        <div className="space-y-1.5">
+          {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+        </div>
+      ) : data.length === 0 ? (
         <p className="text-center text-muted-foreground text-sm py-4">Sin datos en este período</p>
       ) : (
         <div className="space-y-1.5">
@@ -128,10 +137,11 @@ interface OneRMProps {
 export function OneRMPanel({ dateRange }: OneRMProps) {
   const { data: exercises } = useQuery({ queryKey: ['allExercises'], queryFn: getAllExercises });
   const [rms, setRMs] = useState<ExerciseRM[]>([]);
+  const [loadingRMs, setLoadingRMs] = useState(true);
   const [selectedExId, setSelectedExId] = useState('');
   const [rmHistory, setRmHistory] = useState<RM1History[]>([]);
 
-  useEffect(() => { getAll1RMs(dateRange).then(setRMs); }, [dateRange]);
+  useEffect(() => { setLoadingRMs(true); getAll1RMs(dateRange).then(setRMs).finally(() => setLoadingRMs(false)); }, [dateRange]);
   useEffect(() => {
     if (selectedExId) get1RMHistory(selectedExId, dateRange).then(setRmHistory);
     else setRmHistory([]);
@@ -147,7 +157,11 @@ export function OneRMPanel({ dateRange }: OneRMProps) {
         <h3 className="text-sm font-bold">Estimación 1RM (Epley)</h3>
       </div>
 
-      {rms.length > 0 && (
+      {loadingRMs ? (
+        <div className="space-y-1.5">
+          {[1,2,3].map(i => <Skeleton key={i} className="h-14 w-full rounded-xl" />)}
+        </div>
+      ) : rms.length > 0 && (
         <div className="space-y-1.5">
           {rms.map(rm => (
             <div key={rm.exerciseId} className="flex justify-between items-center p-2.5 rounded-xl bg-card border border-border">
@@ -160,7 +174,6 @@ export function OneRMPanel({ dateRange }: OneRMProps) {
           ))}
         </div>
       )}
-
       {/* 1RM Evolution Chart */}
       <Select value={selectedExId} onValueChange={setSelectedExId}>
         <SelectTrigger className="rounded-xl bg-card border-border text-xs">

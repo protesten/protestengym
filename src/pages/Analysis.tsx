@@ -18,6 +18,7 @@ import { DateRangeSelector } from '@/components/DateRangeSelector';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock, Ruler } from 'lucide-react';
 import { BodyEvolutionPanel } from '@/components/BodyEvolutionPanel';
+import { Skeleton } from '@/components/ui/skeleton';
 
 function ArrowBadge({ c }: { c: Comparison }) {
   const cls = c.arrow === '↑' ? 'arrow-up' : c.arrow === '↓' ? 'arrow-down' : 'arrow-equal';
@@ -44,33 +45,42 @@ export default function Analysis() {
   const [prs, setPrs] = useState<PersonalRecord[]>([]);
   const [periodData, setPeriodData] = useState<PeriodSummary[]>([]);
   const [periodGranularity, setPeriodGranularity] = useState<'week' | 'month'>('week');
+  const [loadingExercise, setLoadingExercise] = useState(false);
+  const [loadingMuscle, setLoadingMuscle] = useState(false);
+  const [loadingPrs, setLoadingPrs] = useState(false);
+  const [loadingSummary, setLoadingSummary] = useState(false);
 
   const selectedEx = exercises?.find(e => e.id === selectedExId);
 
   // Exercise tab
   useEffect(() => {
     if (!selectedExId || !selectedEx) return;
-    getExerciseComparisons(selectedEx.id, selectedEx.tracking_type as any, dateRange).then(setExComps);
-    getExerciseHistory(selectedEx.id, selectedEx.tracking_type as any, dateRange).then(setHistory);
+    setLoadingExercise(true);
+    Promise.all([
+      getExerciseComparisons(selectedEx.id, selectedEx.tracking_type as any, dateRange).then(setExComps),
+      getExerciseHistory(selectedEx.id, selectedEx.tracking_type as any, dateRange).then(setHistory),
+    ]).finally(() => setLoadingExercise(false));
   }, [selectedExId, exercises, dateRange]);
 
   // Muscle tab
   useEffect(() => {
-    if (dateRange) {
-      getMuscleComparisons('7d', dateRange).then(setMuscleData);
-    } else {
-      getMuscleComparisons(musclePeriod).then(setMuscleData);
-    }
+    setLoadingMuscle(true);
+    const p = dateRange
+      ? getMuscleComparisons('7d', dateRange)
+      : getMuscleComparisons(musclePeriod);
+    p.then(setMuscleData).finally(() => setLoadingMuscle(false));
   }, [musclePeriod, dateRange]);
 
   // PRs tab
   useEffect(() => {
-    getPersonalRecords(dateRange).then(setPrs);
+    setLoadingPrs(true);
+    getPersonalRecords(dateRange).then(setPrs).finally(() => setLoadingPrs(false));
   }, [dateRange]);
 
   // Summary tab
   useEffect(() => {
-    getPeriodSummaries(periodGranularity, dateRange).then(setPeriodData);
+    setLoadingSummary(true);
+    getPeriodSummaries(periodGranularity, dateRange).then(setPeriodData).finally(() => setLoadingSummary(false));
   }, [periodGranularity, dateRange]);
 
   const unitLabel = selectedEx ? (selectedEx.tracking_type === 'time_only' || selectedEx.tracking_type === 'distance_time' ? 's' : '') : '';
@@ -132,7 +142,13 @@ export default function Analysis() {
               )}
             </SelectContent>
           </Select>
-          {exComps && (
+          {selectedExId && loadingExercise ? (
+            <div className="space-y-2">
+              <Skeleton className="h-16 w-full rounded-xl" />
+              <Skeleton className="h-16 w-full rounded-xl" />
+              <Skeleton className="h-16 w-full rounded-xl" />
+            </div>
+          ) : exComps && (
             <div className="space-y-2">
               {dateRange ? (
                 <ComparisonRow label="Período seleccionado" comparison={exComps.week} unit={unitLabel} />
@@ -189,7 +205,11 @@ export default function Analysis() {
               <button onClick={() => setMusclePeriod('month')} className={`text-sm px-4 py-1.5 rounded-full font-semibold transition-all ${musclePeriod === 'month' ? 'gradient-primary text-primary-foreground glow-primary' : 'bg-secondary text-muted-foreground'}`}>Mes</button>
             </div>
           )}
-          {muscleData.length === 0 ? (
+          {loadingMuscle ? (
+            <div className="space-y-1.5">
+              {[1,2,3,4,5].map(i => <Skeleton key={i} className="h-12 w-full rounded-xl" />)}
+            </div>
+          ) : muscleData.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">Sin datos de volumen muscular en este período</p>
           ) : (
             <div className="space-y-1">
@@ -216,7 +236,11 @@ export default function Analysis() {
         </TabsContent>
 
         <TabsContent value="prs" className="mt-4">
-          {prs.length === 0 ? (
+          {loadingPrs ? (
+            <div className="space-y-3">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-24 w-full rounded-xl" />)}
+            </div>
+          ) : prs.length === 0 ? (
             <p className="text-center text-muted-foreground text-sm py-8">Sin récords en este período.</p>
           ) : (
             <div className="space-y-3">
@@ -273,6 +297,11 @@ export default function Analysis() {
             </div>
           )}
 
+          {loadingSummary ? (
+            <div className="space-y-2">
+              {[1,2,3].map(i => <Skeleton key={i} className="h-32 w-full rounded-xl" />)}
+            </div>
+          ) : (
           <div className="space-y-2">
             {periodData.map((p, i) => {
               const prev = periodData[i + 1];
@@ -336,6 +365,7 @@ export default function Analysis() {
             })}
             {periodData.every(p => p.sessionCount === 0) && <p className="text-center text-muted-foreground text-sm py-8">Sin datos en este período</p>}
           </div>
+          )}
         </TabsContent>
       </Tabs>
     </div>
