@@ -134,6 +134,17 @@ export default function Programs() {
     },
   });
 
+  const updateStartDateMutation = useMutation({
+    mutationFn: async (date: Date) => {
+      const { error } = await supabase.from('programs').update({ start_date: format(date, 'yyyy-MM-dd') }).eq('id', selectedProgramId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      toast.success('Fecha de inicio actualizada');
+    },
+  });
+
   const selectedProgram = programs?.find(p => p.id === selectedProgramId);
 
   return (
@@ -163,6 +174,29 @@ export default function Programs() {
               <CheckCircle className="h-3.5 w-3.5 mr-1" />
               {selectedProgram.is_active ? 'Activo' : 'Activar'}
             </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Inicio:</Label>
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg bg-secondary/50 border-border justify-start font-normal">
+                  <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
+                  {(selectedProgram as any).start_date
+                    ? format(new Date((selectedProgram as any).start_date + 'T00:00:00'), "PPP", { locale: es })
+                    : 'Sin fecha'}
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-auto p-0" align="start">
+                <CalendarComponent
+                  mode="single"
+                  selected={(selectedProgram as any).start_date ? new Date((selectedProgram as any).start_date + 'T00:00:00') : undefined}
+                  onSelect={(d) => d && updateStartDateMutation.mutate(d)}
+                  initialFocus
+                  className={cn("p-3 pointer-events-auto")}
+                />
+              </PopoverContent>
+            </Popover>
           </div>
 
           <div className="space-y-1.5">
