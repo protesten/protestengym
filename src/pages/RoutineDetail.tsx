@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRoutines, getRoutineExercises, getAllExercises, addRoutineExercise, deleteRoutineExercise, updateRoutineExercise, type AnyExercise } from '@/lib/api';
-import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type PlannedSet, type TrackingType } from '@/lib/constants';
+import { getRoutines, getRoutineExercises, getAllExercises, addRoutineExercise, deleteRoutineExercise, updateRoutineExercise, getRoutineTrainingGoal, updateRoutineTrainingGoal, type AnyExercise } from '@/lib/api';
+import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type PlannedSet, type TrackingType, TRAINING_GOALS, type TrainingGoal } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -83,7 +83,13 @@ export default function RoutineDetail() {
   const routine = routines?.find(r => r.id === routineId);
   const { data: routineExercises } = useQuery({ queryKey: ['routine_exercises', routineId], queryFn: () => getRoutineExercises(routineId) });
   const { data: exercises } = useQuery({ queryKey: ['all_exercises'], queryFn: getAllExercises });
+  const { data: currentGoal } = useQuery({ queryKey: ['routine_training_goal', routineId], queryFn: () => getRoutineTrainingGoal(routineId) });
   const [selectedExId, setSelectedExId] = useState('');
+
+  const updateGoalMutation = useMutation({
+    mutationFn: (goal: string | null) => updateRoutineTrainingGoal(routineId, goal),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['routine_training_goal', routineId] }); toast.success('Objetivo actualizado'); },
+  });
 
   const addMutation = useMutation({
     mutationFn: async () => { if (!selectedExId) return; const maxOrder = routineExercises?.length ? Math.max(...routineExercises.map(re => re.order_index)) : -1; await addRoutineExercise(routineId, selectedExId, maxOrder + 1); },
@@ -128,7 +134,20 @@ export default function RoutineDetail() {
       <button onClick={() => navigate('/routines')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm font-medium hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />Volver
       </button>
-      <h1 className="text-xl font-black mb-4">{routine.name}</h1>
+      <h1 className="text-xl font-black mb-2">{routine.name}</h1>
+
+      {/* Training goal selector */}
+      <div className="flex gap-1.5 mb-4">
+        {(Object.entries(TRAINING_GOALS) as [TrainingGoal, typeof TRAINING_GOALS[TrainingGoal]][]).map(([key, goal]) => (
+          <button
+            key={key}
+            onClick={() => updateGoalMutation.mutate(currentGoal === key ? null : key)}
+            className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-bold transition-colors border ${currentGoal === key ? 'bg-primary/15 border-primary/30 text-primary' : 'bg-secondary/30 border-border text-muted-foreground hover:border-primary/20'}`}
+          >
+            {goal.emoji} {goal.label}
+          </button>
+        ))}
+      </div>
 
       <div className="flex gap-2 mb-4">
         <ExerciseSearchSelect exercises={exercises} value={selectedExId} onChange={setSelectedExId} />
