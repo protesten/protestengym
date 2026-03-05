@@ -1,3 +1,4 @@
+import { lazy, Suspense } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,23 +7,25 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { BottomNav } from "@/components/BottomNav";
-import Index from "./pages/Index";
-import Exercises from "./pages/Exercises";
-import Routines from "./pages/Routines";
-import RoutineDetail from "./pages/RoutineDetail";
-import NewSession from "./pages/NewSession";
-import SessionDetail from "./pages/SessionDetail";
-import Analysis from "./pages/Analysis";
-import Profile from "./pages/Profile";
-import Measurements from "./pages/Measurements";
-import Programs from "./pages/Programs";
-import MonthlyReport from "./pages/MonthlyReport";
-import MeasurementsReport from "./pages/MeasurementsReport";
-import SessionCalendar from "./pages/SessionCalendar";
-import Auth from "./pages/Auth";
-import Fatigue from "./pages/Fatigue";
-import Coach from "./pages/Coach";
-import NotFound from "./pages/NotFound";
+import { Loader2 } from "lucide-react";
+
+const Index = lazy(() => import("./pages/Index"));
+const Exercises = lazy(() => import("./pages/Exercises"));
+const Routines = lazy(() => import("./pages/Routines"));
+const RoutineDetail = lazy(() => import("./pages/RoutineDetail"));
+const NewSession = lazy(() => import("./pages/NewSession"));
+const SessionDetail = lazy(() => import("./pages/SessionDetail"));
+const Analysis = lazy(() => import("./pages/Analysis"));
+const Profile = lazy(() => import("./pages/Profile"));
+const Measurements = lazy(() => import("./pages/Measurements"));
+const Programs = lazy(() => import("./pages/Programs"));
+const MonthlyReport = lazy(() => import("./pages/MonthlyReport"));
+const MeasurementsReport = lazy(() => import("./pages/MeasurementsReport"));
+const SessionCalendar = lazy(() => import("./pages/SessionCalendar"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Fatigue = lazy(() => import("./pages/Fatigue"));
+const Coach = lazy(() => import("./pages/Coach"));
+const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +38,21 @@ const queryClient = new QueryClient({
   },
 });
 
+const PageLoader = () => (
+  <div className="flex items-center justify-center min-h-screen">
+    <Loader2 className="h-8 w-8 animate-spin text-primary" />
+  </div>
+);
+
+const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
+  <ProtectedRoute>
+    <div className="min-h-screen pb-14 w-full overflow-x-hidden">
+      {children}
+      <BottomNav />
+    </div>
+  </ProtectedRoute>
+);
+
 const App = () => (
   <QueryClientProvider client={queryClient}>
     <AuthProvider>
@@ -42,25 +60,27 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
-          <Routes>
-            <Route path="/auth" element={<Auth />} />
-            <Route path="/" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Index /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/exercises" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Exercises /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/routines" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Routines /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/routines/:id" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><RoutineDetail /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/session/new" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><NewSession /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/session/:id" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><SessionDetail /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/analysis" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Analysis /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/measurements" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Measurements /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/programs" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Programs /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/report" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><MonthlyReport /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/measurements-report" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><MeasurementsReport /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/calendar" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><SessionCalendar /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/profile" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Profile /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/fatigue" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Fatigue /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="/coach" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Coach /><BottomNav /></div></ProtectedRoute>} />
-            <Route path="*" element={<NotFound />} />
-          </Routes>
+          <Suspense fallback={<PageLoader />}>
+            <Routes>
+              <Route path="/auth" element={<Auth />} />
+              <Route path="/" element={<ProtectedPage><Index /></ProtectedPage>} />
+              <Route path="/exercises" element={<ProtectedPage><Exercises /></ProtectedPage>} />
+              <Route path="/routines" element={<ProtectedPage><Routines /></ProtectedPage>} />
+              <Route path="/routines/:id" element={<ProtectedPage><RoutineDetail /></ProtectedPage>} />
+              <Route path="/session/new" element={<ProtectedPage><NewSession /></ProtectedPage>} />
+              <Route path="/session/:id" element={<ProtectedPage><SessionDetail /></ProtectedPage>} />
+              <Route path="/analysis" element={<ProtectedPage><Analysis /></ProtectedPage>} />
+              <Route path="/measurements" element={<ProtectedPage><Measurements /></ProtectedPage>} />
+              <Route path="/programs" element={<ProtectedPage><Programs /></ProtectedPage>} />
+              <Route path="/report" element={<ProtectedPage><MonthlyReport /></ProtectedPage>} />
+              <Route path="/measurements-report" element={<ProtectedPage><MeasurementsReport /></ProtectedPage>} />
+              <Route path="/calendar" element={<ProtectedPage><SessionCalendar /></ProtectedPage>} />
+              <Route path="/profile" element={<ProtectedPage><Profile /></ProtectedPage>} />
+              <Route path="/fatigue" element={<ProtectedPage><Fatigue /></ProtectedPage>} />
+              <Route path="/coach" element={<ProtectedPage><Coach /></ProtectedPage>} />
+              <Route path="*" element={<NotFound />} />
+            </Routes>
+          </Suspense>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>
