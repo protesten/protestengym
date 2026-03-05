@@ -48,8 +48,9 @@ export function TodayRoutineSuggestion() {
       const today = now.toISOString().slice(0, 10);
       const { data: todaySessions } = await supabase
         .from('sessions')
-        .select('routine_id')
-        .eq('date', today);
+        .select('routine_id, is_completed')
+        .eq('date', today)
+        .eq('is_completed', true);
       const completedIds = new Set(todaySessions?.map(s => s.routine_id).filter(Boolean));
       const pendingIds = routineIds.filter(id => !completedIds.has(id));
       const allCompleted = pendingIds.length === 0;

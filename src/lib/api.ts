@@ -269,12 +269,13 @@ export async function deleteSet(id: string) {
 export type PreviousSessionData = { sets: WorkoutSet[]; date: string | null };
 
 export async function getPreviousSetsForExercise(exerciseId: string, currentSessionId: string): Promise<PreviousSessionData> {
-  // Fetch all session_exercises for this exercise with their session date, excluding current
+  // Fetch all session_exercises for this exercise with their session date, excluding current, only completed
   const { data: ses, error: seErr } = await supabase
     .from('session_exercises')
-    .select('id, session_id, sessions!inner(date)')
+    .select('id, session_id, sessions!inner(date, is_completed)')
     .eq('exercise_id', exerciseId)
-    .neq('session_id', currentSessionId);
+    .neq('session_id', currentSessionId)
+    .eq('sessions.is_completed', true);
   if (seErr || !ses?.length) return { sets: [], date: null };
   // Sort client-side by session date descending
   const sorted = ses.sort((a, b) => {
@@ -294,8 +295,9 @@ export async function getPreviousSetsForExercise(exerciseId: string, currentSess
 export async function getWeightHistoryForExercise(exerciseId: string, limit = 5): Promise<{ weight: number; reps: number; date: string }[]> {
   const { data: ses, error: seErr } = await supabase
     .from('session_exercises')
-    .select('id, sessions!inner(date)')
-    .eq('exercise_id', exerciseId);
+    .select('id, sessions!inner(date, is_completed)')
+    .eq('exercise_id', exerciseId)
+    .eq('sessions.is_completed', true);
   if (seErr || !ses?.length) return [];
   const sorted = ses.sort((a, b) => {
     const dateA = (a as any).sessions?.date ?? '';
@@ -320,8 +322,9 @@ export async function getWeightHistoryForExercise(exerciseId: string, limit = 5)
 export async function getBest1RMForExercise(exerciseId: string): Promise<{ oneRM: number; weight: number; reps: number } | null> {
   const { data: ses } = await supabase
     .from('session_exercises')
-    .select('id')
-    .eq('exercise_id', exerciseId);
+    .select('id, sessions!inner(is_completed)')
+    .eq('exercise_id', exerciseId)
+    .eq('sessions.is_completed', true);
   if (!ses?.length) return null;
   const seIds = ses.map(s => s.id);
   const { data: sets } = await supabase
