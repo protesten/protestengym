@@ -26,7 +26,7 @@ import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggesti
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download, CheckCircle2 } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -501,6 +501,40 @@ export default function SessionDetail() {
             >
               <Plus className="h-3.5 w-3.5 mr-1" />Serie
             </Button>
+
+            {/* Complete & next button */}
+            {sets.length > 0 && (
+              <Button
+                size="sm"
+                variant="outline"
+                className="mt-1.5 w-full rounded-lg h-8 text-xs font-bold border-primary/30 text-primary hover:bg-primary/10"
+                onClick={() => {
+                  // Find next exercise in the full list
+                  const allSes = sessionExercises ?? [];
+                  const currentIdx = allSes.findIndex(s => s.id === se.id);
+                  const nextSe = allSes[currentIdx + 1];
+                  if (nextSe) {
+                    setActiveExerciseId(nextSe.id);
+                    // Auto-add first set if upcoming exercise has none
+                    if (getSets(nextSe.id).length === 0) {
+                      addSetMutation.mutate(nextSe.id);
+                    }
+                  } else {
+                    setActiveExerciseId(null);
+                    toast.success('🎉 ¡Último ejercicio completado!');
+                  }
+                }}
+              >
+                <CheckCircle2 className="h-3.5 w-3.5 mr-1" />
+                {(() => {
+                  const allSes = sessionExercises ?? [];
+                  const currentIdx = allSes.findIndex(s => s.id === se.id);
+                  const nextSe = allSes[currentIdx + 1];
+                  const nextEx = nextSe ? getExercise(nextSe.exercise_id) : null;
+                  return nextEx ? `Completar → ${nextEx.name}` : 'Completar ejercicio';
+                })()}
+              </Button>
+            )}
           </div>
         )}
       </div>
