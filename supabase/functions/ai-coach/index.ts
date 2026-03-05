@@ -18,9 +18,11 @@ serve(async (req) => {
 
 Reglas de análisis:
 - Si un ejercicio lleva 3+ sesiones sin subir el 1RM estimado → es una "meseta" (plateau).
-- Si el peso corporal baja pero el 1RM se mantiene o sube → la "fuerza relativa" está mejorando (eficiencia neuromuscular).
+- Si el peso corporal baja pero el 1RM se mantiene o sube → la "fuerza relativa" está mejorando (eficiencia neuromuscular). Da un mensaje de refuerzo positivo sobre "Mejora en Fuerza Relativa y Eficiencia Neuromuscular".
 - Si el RPE promedio semanal es > 8.5 → sugerir una semana de descarga (deload).
+- Si el RPE promedio de los últimos 3 entrenamientos es > 9 → sugerir urgentemente una "Semana de Descarga" y recomendar reducir el peso un 10%.
 - Si el RPE promedio semanal es ≤ 7 → hay margen para subir cargas.
+- Si hay datos de grasa corporal y el usuario está en déficit (grasa bajando), prioriza el descanso en tus consejos.
 
 Debes usar la herramienta analyze_training para dar tu respuesta estructurada. Sé conciso, directo y motivador. Usa los datos proporcionados, no inventes datos.`;
 
@@ -49,20 +51,20 @@ Debes usar la herramienta analyze_training para dar tu respuesta estructurada. S
                 properties: {
                   achievement: {
                     type: "string",
-                    description: "Logro destacado de la semana. Ej: 'Tu Press Banca ha subido un 3%'. Si no hay logros claros, menciona algo positivo como consistencia.",
+                    description: "Logro destacado de la semana. Ej: 'Tu Press Banca ha subido un 3%'. Si no hay logros claros, menciona algo positivo como consistencia o mejora en fuerza relativa.",
                   },
                   alert: {
                     type: "string",
-                    description: "Alerta de mejora o estancamiento. Ej: 'Llevas 3 sesiones sin mejorar en Sentadilla'. Si no hay alertas, indica que todo va bien.",
+                    description: "Alerta de mejora o estancamiento. Ej: 'Llevas 3 sesiones sin mejorar en Sentadilla'. Si RPE últimos 3 entrenos > 9, sugiere descarga urgente y reducir peso un 10%. Si no hay alertas, indica que todo va bien.",
                   },
                   advice: {
                     type: "string",
-                    description: "Consejo personalizado basado en los datos antropométricos y de fatiga. Ej: 'Como tu RPE promedio es alto, considera una semana de descarga'.",
+                    description: "Consejo personalizado basado en los datos antropométricos y de fatiga. Si el peso corporal baja pero la fuerza se mantiene, destaca la mejora en eficiencia neuromuscular. Si está en déficit calórico (grasa bajando), prioriza descanso.",
                   },
                   status: {
                     type: "string",
                     enum: ["progress", "plateau", "overtraining"],
-                    description: "Estado general: 'progress' si hay mejoras, 'plateau' si hay estancamiento, 'overtraining' si RPE promedio > 8.5.",
+                    description: "Estado general: 'progress' si hay mejoras, 'plateau' si hay estancamiento, 'overtraining' si RPE promedio > 8.5 o RPE de últimos 3 entrenos > 9.",
                   },
                 },
                 required: ["achievement", "alert", "advice", "status"],

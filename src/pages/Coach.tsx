@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { Brain, Trophy, AlertTriangle, Lightbulb, Loader2, ArrowLeft, Clock } from 'lucide-react';
+import { Brain, Trophy, AlertTriangle, Lightbulb, Loader2, ArrowLeft, Clock, Activity } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { getRPEBadge } from '@/components/RPEFeedback';
 import { useToast } from '@/hooks/use-toast';
 import { supabase } from '@/integrations/supabase/client';
 import { getCoachData } from '@/db/coach-data';
@@ -16,6 +18,8 @@ interface CoachAnalysis {
   advice: string;
   status: 'progress' | 'plateau' | 'overtraining';
   timestamp: string;
+  weeklyAvgRPE?: number | null;
+  last3SessionsAvgRPE?: number | null;
 }
 
 const STORAGE_KEY = 'coach-history';
@@ -63,6 +67,8 @@ export default function Coach() {
       const analysis: CoachAnalysis = {
         ...data,
         timestamp: new Date().toISOString(),
+        weeklyAvgRPE: coachData.weeklyAvgRPE,
+        last3SessionsAvgRPE: coachData.last3SessionsAvgRPE,
       };
 
       setCurrent(analysis);
@@ -151,6 +157,44 @@ export default function Coach() {
               <p className="text-sm text-foreground">{current.advice}</p>
             </CardContent>
           </Card>
+
+          {/* RPE Fatigue Summary */}
+          {(current.weeklyAvgRPE != null || current.last3SessionsAvgRPE != null) && (
+            <Card className="border border-border">
+              <CardContent className="p-4">
+                <div className="flex items-center gap-2 mb-3">
+                  <Activity className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-bold">Semáforo de Fatiga</span>
+                </div>
+                <div className="space-y-2">
+                  {current.weeklyAvgRPE != null && (() => {
+                    const badge = getRPEBadge(Math.round(current.weeklyAvgRPE!));
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">RPE medio semanal</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm">{current.weeklyAvgRPE}</span>
+                          {badge && <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 border ${badge.className}`}>{badge.label}</Badge>}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {current.last3SessionsAvgRPE != null && (() => {
+                    const badge = getRPEBadge(Math.round(current.last3SessionsAvgRPE!));
+                    return (
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">RPE medio (últimos 3)</span>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-sm">{current.last3SessionsAvgRPE}</span>
+                          {badge && <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 border ${badge.className}`}>{badge.label}</Badge>}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </div>
       )}
 
