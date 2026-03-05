@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { format, parseISO } from 'date-fns';
@@ -20,7 +20,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
-import { RestTimer } from '@/components/RestTimer';
+import { RestTimer, type RestTimerHandle } from '@/components/RestTimer';
+import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggestion';
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
@@ -32,7 +33,14 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { PreviousSessionReference } from '@/components/PreviousSessionReference';
 
-/* ── Compact numeric input ── */
+/* ── Sanitize numeric input ── */
+const sanitize = (raw: string): number | null => {
+  const cleaned = raw.trim().replace(',', '.');
+  if (cleaned === '') return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+
 function NumericInput({ value, placeholder, className, onSave }: { value: number | null; placeholder: string; className?: string; onSave: (v: number | null) => void }) {
   const [local, setLocal] = useState(value?.toString() ?? '');
   useEffect(() => { setLocal(value?.toString() ?? ''); }, [value]);
@@ -41,7 +49,7 @@ function NumericInput({ value, placeholder, className, onSave }: { value: number
       inputMode="decimal" placeholder={placeholder}
       className={cn("rounded-md bg-secondary/50 border-border text-center", className)}
       value={local} onChange={e => setLocal(e.target.value)}
-      onBlur={() => { const parsed = local.trim() === '' ? null : Number(local); if (parsed !== value) onSave(parsed); }}
+      onBlur={() => { const parsed = sanitize(local); if (parsed !== value) onSave(parsed); }}
     />
   );
 }
@@ -73,16 +81,16 @@ function SetTypeChip({ type, onChange }: { type: SetType; onChange: (t: SetType)
 
 /* ── Set row: ultra compact ── */
 function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; prevSet?: WorkoutSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
-  const rpeValue = (set as any).rpe;
+  const rpeValue = set.rpe as number | null;
 
   const repsPlaceholder = plannedSet && plannedSet.min_reps != null && plannedSet.max_reps != null
     ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
     : 'reps';
-  const timePlaceholder = plannedSet && (plannedSet as any).min_time_seconds != null && (plannedSet as any).max_time_seconds != null
-    ? `${(plannedSet as any).min_time_seconds}-${(plannedSet as any).max_time_seconds}`
+  const timePlaceholder = plannedSet && plannedSet.min_time_seconds != null && plannedSet.max_time_seconds != null
+    ? `${plannedSet.min_time_seconds}-${plannedSet.max_time_seconds}`
     : 'seg';
-  const distancePlaceholder = plannedSet && (plannedSet as any).min_distance_meters != null && (plannedSet as any).max_distance_meters != null
-    ? `${(plannedSet as any).min_distance_meters}-${(plannedSet as any).max_distance_meters}`
+  const distancePlaceholder = plannedSet && plannedSet.min_distance_meters != null && plannedSet.max_distance_meters != null
+    ? `${plannedSet.min_distance_meters}-${plannedSet.max_distance_meters}`
     : 'm';
 
   // Comparison border
@@ -135,7 +143,7 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
       )}
 
       <div className="flex items-center gap-1">
-        <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
+        <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null })}>
           <SelectTrigger className="w-16 h-8 text-xs rounded-md bg-card border-border">
             <SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} />
           </SelectTrigger>
@@ -154,6 +162,8 @@ export default function SessionDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const sessionId = id!;
+  const restTimerRef = useRef<RestTimerHandle>(null);
+  const { enqueue: enqueueOffline, hasPending: hasOfflinePending } = useOfflineQueue();
 
   const { data: session } = useQuery({ queryKey: ['session', sessionId], queryFn: () => getSession(sessionId) });
   const { data: sessionExercises } = useQuery({ queryKey: ['session_exercises', sessionId], queryFn: () => getSessionExercises(sessionId) });
@@ -190,7 +200,8 @@ export default function SessionDetail() {
     const map = new Map<string, PlannedSet[]>();
     if (!routineExercises) return map;
     for (const re of routineExercises) {
-      const ps = Array.isArray((re as any).planned_sets) ? (re as any).planned_sets : [];
+      const raw = re.planned_sets;
+      const ps: PlannedSet[] = Array.isArray(raw) ? (raw as PlannedSet[]) : [];
       map.set(re.exercise_id, ps);
     }
     return map;
@@ -263,15 +274,26 @@ export default function SessionDetail() {
       queryClient.setQueryData<WorkoutSet[]>(setsQueryKey, old => (old ?? []).map(s => s.id === setId ? { ...s, ...data } : s));
       return { prev };
     },
-    onError: (_err, _vars, ctx) => { if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev); },
+    onError: (_err, vars, ctx) => {
+      if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev);
+      // Offline fallback: enqueue for retry
+      enqueueOffline(vars.setId, vars.data as Record<string, unknown>);
+      toast.info('Sin conexión — cambios guardados localmente');
+    },
     onSuccess: async (_res, { setId, data, exerciseId }) => {
+      // Auto-timer by RPE
+      if (data.rpe != null && typeof data.rpe === 'number') {
+        const seconds = data.rpe > 8 ? 180 : 90;
+        restTimerRef.current?.start(seconds);
+      }
+
       if (exerciseId && (data.weight != null || data.reps != null || data.duration_seconds != null || data.distance_meters != null)) {
         const currentSet = allSets?.find(s => s.id === setId);
         if (currentSet) {
           const merged = { ...currentSet, ...data } as WorkoutSet;
           const ex = getExercise(exerciseId);
           if (ex) {
-            const result = await checkForPR(exerciseId, ex.tracking_type as any, merged);
+            const result = await checkForPR(exerciseId, ex.tracking_type as TrackingType, merged);
             if (result.isPR) {
               setPrSets(prev => new Set(prev).add(setId));
               const labels: Record<string, string> = { weight: '¡Nuevo PR de peso!', '1rm': '¡Nuevo PR de 1RM estimado!', reps: '¡Nuevo PR de reps!', volume: '¡Nuevo PR de volumen!', time: '¡Nuevo PR de tiempo!', distance: '¡Nuevo PR de distancia!' };
@@ -445,7 +467,7 @@ export default function SessionDetail() {
                       <Video className="h-4 w-4 text-primary mx-1" />
                     </a>
                   )}
-                  <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={(ex as any)?.notes ?? null} source={ex?.source ?? 'personal'} />
+                  <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={ex?.notes ?? null} source={ex?.source ?? 'personal'} />
                   {ex?.tracking_type === 'weight_reps' && (
                     <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} onApply={(w) => handleApplyWeight(se.id, w)} />
                   )}
@@ -476,7 +498,7 @@ export default function SessionDetail() {
                         onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
                         onDelete={() => deleteSetMutation.mutate(s.id)}
                       />
-                      <RPEFeedback rpe={(s as any).rpe} weight={s.weight} />
+                      <RPEFeedback rpe={s.rpe as number | null} weight={s.weight} />
                     </div>
                   ))}
                 </div>
@@ -505,7 +527,13 @@ export default function SessionDetail() {
         </div>
       )}
 
-      <RestTimer />
+      <RestTimer ref={restTimerRef} />
+
+      {hasOfflinePending && (
+        <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-card border border-border rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-lg">
+          ⏳ Datos pendientes de sincronizar
+        </div>
+      )}
 
       {showExportCard && (
         <div className="fixed left-[-9999px] top-0">
