@@ -60,7 +60,21 @@ export async function updateExercise(id: string, ex: TablesUpdate<'exercises'>) 
   if (error) throw error;
 }
 
+export async function getExerciseUsage(exerciseId: string) {
+  const [sessionRes, routineRes] = await Promise.all([
+    supabase.from('session_exercises').select('*', { count: 'exact', head: true }).eq('exercise_id', exerciseId),
+    supabase.from('routine_exercises').select('*', { count: 'exact', head: true }).eq('exercise_id', exerciseId),
+  ]);
+  return {
+    sessionCount: sessionRes.count ?? 0,
+    routineCount: routineRes.count ?? 0,
+  };
+}
+
 export async function deleteExercise(id: string) {
+  // Manually cascade: delete related session_exercises and routine_exercises first
+  await supabase.from('session_exercises').delete().eq('exercise_id', id);
+  await supabase.from('routine_exercises').delete().eq('exercise_id', id);
   const { error } = await supabase.from('exercises').delete().eq('id', id);
   if (error) throw error;
 }
@@ -84,6 +98,8 @@ export async function updatePredefinedExercise(id: string, ex: TablesUpdate<'pre
 }
 
 export async function deletePredefinedExercise(id: string) {
+  await supabase.from('session_exercises').delete().eq('exercise_id', id);
+  await supabase.from('routine_exercises').delete().eq('exercise_id', id);
   const { error } = await supabase.from('predefined_exercises').delete().eq('id', id);
   if (error) throw error;
 }
