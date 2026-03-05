@@ -7,11 +7,11 @@ import {
   updateSession, deleteSession as deleteSessionApi, addSessionExercise,
   createSet, updateSet as updateSetApi, deleteSet as deleteSetApi,
   deleteSessionExercise as deleteSeApi, updateSessionExercise,
-  createSession, getRoutineExercises, getPreviousSetsForExercise,
+  createSession, getRoutineExercises, getPreviousSetsForExercise, getRoutineTrainingGoal,
   type WorkoutSet, type AnyExercise, type PreviousSessionData,
 } from '@/lib/api';
 import { getSessionSummary, checkForPR, type SessionSummary } from '@/db/calculations';
-import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType, type PlannedSet } from '@/lib/constants';
+import { SET_TYPE_LABELS, RPE_OPTIONS, type SetType, type TrackingType, type PlannedSet, type TrainingGoal } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -21,7 +21,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
 import { RestTimer } from '@/components/RestTimer';
-import { WeightSuggestion } from '@/components/WeightSuggestion';
+import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggestion';
+import { RPEFeedback } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2 } from 'lucide-react';
@@ -160,6 +161,12 @@ export default function SessionDetail() {
   const { data: routineExercises } = useQuery({
     queryKey: ['routine_exercises', routineId],
     queryFn: () => getRoutineExercises(routineId!),
+    enabled: !!routineId,
+  });
+
+  const { data: trainingGoal } = useQuery({
+    queryKey: ['routine_training_goal', routineId],
+    queryFn: () => getRoutineTrainingGoal(routineId!),
     enabled: !!routineId,
   });
 
@@ -432,7 +439,7 @@ export default function SessionDetail() {
                 <div className="flex items-center gap-0">
                   <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={(ex as any)?.notes ?? null} source={ex?.source ?? 'personal'} />
                   {ex?.tracking_type === 'weight_reps' && (
-                    <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} onApply={(w) => handleApplyWeight(se.id, w)} />
+                    <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} onApply={(w) => handleApplyWeight(se.id, w)} />
                   )}
                   <AlertDialog>
                     <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive/70" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
@@ -443,19 +450,26 @@ export default function SessionDetail() {
                   </AlertDialog>
                 </div>
               </div>
+              {ex?.tracking_type === 'weight_reps' && (
+                <div className="px-2 pb-1">
+                  <TargetWeightBadge exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} />
+                </div>
+              )}
               <AccordionContent>
                 <PreviousSessionReference sets={prevSets} date={prevDate} trackingType={ex?.tracking_type ?? 'weight_reps'} />
                 <div className="space-y-1">
                   {sets.map((s, setIdx) => (
-                    <SetRow
-                      key={s.id}
-                      set={s}
-                      trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
-                      plannedSet={plannedSets[setIdx]}
-                      prevSet={prevSets[setIdx]}
-                      onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
-                      onDelete={() => deleteSetMutation.mutate(s.id)}
-                    />
+                    <div key={s.id}>
+                      <SetRow
+                        set={s}
+                        trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
+                        plannedSet={plannedSets[setIdx]}
+                        prevSet={prevSets[setIdx]}
+                        onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
+                        onDelete={() => deleteSetMutation.mutate(s.id)}
+                      />
+                      <RPEFeedback rpe={(s as any).rpe} weight={s.weight} />
+                    </div>
                   ))}
                 </div>
                 <Button variant="outline" size="sm" className="mt-2 w-full rounded-lg border-dashed border-border hover:border-primary/30 h-8 text-xs" onClick={() => addSetMutation.mutate(se.id)}>

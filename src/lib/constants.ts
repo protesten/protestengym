@@ -33,6 +33,21 @@ export const SET_TYPE_LABELS: Record<SetType, string> = {
 
 export const RPE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
+export type TrainingGoal = 'strength' | 'hypertrophy' | 'endurance';
+export const TRAINING_GOALS: Record<TrainingGoal, { label: string; pct: number; reps: string; emoji: string }> = {
+  strength: { label: 'Fuerza', pct: 0.85, reps: '3-5', emoji: '🏋️' },
+  hypertrophy: { label: 'Hipertrofia', pct: 0.75, reps: '8-12', emoji: '💪' },
+  endurance: { label: 'Resistencia', pct: 0.60, reps: '15+', emoji: '🔄' },
+};
+
+export const BODYWEIGHT_EXERCISE_PATTERNS = [
+  'dominad', 'pull up', 'pullup', 'chin up', 'chinup',
+  'flexion', 'push up', 'pushup',
+  'fondo', 'dip',
+  'muscle up', 'muscleup',
+  'pistol',
+];
+
 export type PlannedSet = {
   set_type: SetType;
   rpe: number | null;

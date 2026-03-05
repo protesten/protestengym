@@ -234,6 +234,7 @@ export type Database = {
           order_index: number
           program_id: string
           routine_id: string | null
+          training_goal: string | null
           week_number: number
         }
         Insert: {
@@ -242,6 +243,7 @@ export type Database = {
           order_index?: number
           program_id: string
           routine_id?: string | null
+          training_goal?: string | null
           week_number: number
         }
         Update: {
@@ -250,6 +252,7 @@ export type Database = {
           order_index?: number
           program_id?: string
           routine_id?: string | null
+          training_goal?: string | null
           week_number?: number
         }
         Relationships: [
@@ -339,18 +342,21 @@ export type Database = {
           created_at: string
           id: string
           name: string
+          training_goal: string | null
           user_id: string
         }
         Insert: {
           created_at?: string
           id?: string
           name: string
+          training_goal?: string | null
           user_id: string
         }
         Update: {
           created_at?: string
           id?: string
           name?: string
+          training_goal?: string | null
           user_id?: string
         }
         Relationships: []

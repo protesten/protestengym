@@ -299,6 +299,59 @@ export async function getWeightHistoryForExercise(exerciseId: string, limit = 5)
     .map(s => ({ weight: s.weight!, reps: s.reps!, date: seIdToDate.get(s.session_exercise_id) ?? '' }));
 }
 
+// ============ Best 1RM for exercise ============
+export async function getBest1RMForExercise(exerciseId: string): Promise<{ oneRM: number; weight: number; reps: number } | null> {
+  const { data: ses } = await supabase
+    .from('session_exercises')
+    .select('id')
+    .eq('exercise_id', exerciseId);
+  if (!ses?.length) return null;
+  const seIds = ses.map(s => s.id);
+  const { data: sets } = await supabase
+    .from('sets')
+    .select('weight, reps')
+    .in('session_exercise_id', seIds)
+    .eq('set_type', 'work')
+    .not('weight', 'is', null)
+    .not('reps', 'is', null);
+  if (!sets?.length) return null;
+  let best = { oneRM: 0, weight: 0, reps: 0 };
+  for (const s of sets) {
+    const w = s.weight ?? 0;
+    const r = s.reps ?? 0;
+    if (w <= 0 || r <= 0) continue;
+    const rm = r === 1 ? w : w * (1 + r / 30);
+    if (rm > best.oneRM) best = { oneRM: Math.round(rm * 10) / 10, weight: w, reps: r };
+  }
+  return best.oneRM > 0 ? best : null;
+}
+
+// ============ Latest body weight ============
+export async function getLatestBodyWeight(): Promise<number | null> {
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) return null;
+  const { data } = await supabase
+    .from('body_measurements')
+    .select('weight_kg')
+    .eq('user_id', user.id)
+    .not('weight_kg', 'is', null)
+    .order('date', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  return data?.weight_kg ?? null;
+}
+
+// ============ Routine training goal ============
+export async function getRoutineTrainingGoal(routineId: string): Promise<string | null> {
+  const { data } = await supabase.from('routines').select('training_goal').eq('id', routineId).maybeSingle();
+  return (data as any)?.training_goal ?? null;
+}
+
+export async function updateRoutineTrainingGoal(routineId: string, goal: string | null) {
+  const { error } = await supabase.from('routines').update({ training_goal: goal } as any).eq('id', routineId);
+  if (error) throw error;
+}
+
 // ============ Profile ============
 export async function getProfile() {
   const { data: { user } } = await supabase.auth.getUser();
