@@ -1,28 +1,35 @@
 
 
-## Bug: Sesiones de hoy se ignoran en el cálculo de fatiga
+## Fix: Rutinas completadas siguen apareciendo como activas
 
-### Causa raíz
+### Problema
 
-En `src/lib/fatigue-config.ts`, línea 69, la fecha de cada sesión se convierte a timestamp usando `T12:00:00` (mediodía):
-
-```typescript
-const sessionTime = new Date(session.date + 'T12:00:00').getTime();
-const hoursAgo = (now - sessionTime) / 3_600_000;
-if (hoursAgo < 0 || hoursAgo > 14 * 24) continue;  // ← SKIP si negativo
-```
-
-Si consultas la fatiga **antes de las 12:00 del mediodía**, `hoursAgo` es negativo para la sesión de hoy → se descarta por completo. Esto explica por qué no ves fatiga alguna a pesar de haber entrenado hoy.
+`TodayRoutineSuggestion` muestra todas las rutinas programadas para la semana actual, pero nunca comprueba si ya existe una sesión de hoy con ese `routine_id`. Así que aunque hayas completado la rutina, sigue apareciendo con el botón de Play.
 
 ### Solución
 
-Cambiar `T12:00:00` por `T00:00:00` para que la sesión cuente desde el inicio del día. Así cualquier consulta posterior a medianoche incluirá la sesión correctamente.
+En la query del componente, después de obtener los `routineIds` programados, consultar las sesiones de hoy y filtrar las rutinas que ya tengan una sesión registrada. Si todas están completadas, el componente no se renderiza.
 
 ### Cambios
 
 | Archivo | Acción |
 |---|---|
-| `src/lib/fatigue-config.ts` | Cambiar `'T12:00:00'` → `'T00:00:00'` en línea 69 |
+| `src/components/TodayRoutineSuggestion.tsx` | Tras obtener `routineIds`, consultar `sessions` filtrando por `date = hoy` y descartar las rutinas cuyo `routine_id` ya aparezca en una sesión de hoy |
 
-Es un cambio de 1 línea.
+Cambio de ~10 líneas en 1 archivo. La lógica adicional:
+
+```typescript
+// 4.5 Check which routines already have a session today
+const today = now.toISOString().slice(0, 10);
+const { data: todaySessions } = await supabase
+  .from('sessions')
+  .select('routine_id')
+  .eq('date', today);
+const completedIds = new Set(todaySessions?.map(s => s.routine_id).filter(Boolean));
+// Filter out completed routines
+const pendingIds = routineIds.filter(id => !completedIds.has(id));
+if (!pendingIds.length) return null;
+```
+
+Luego usar `pendingIds` en lugar de `routineIds` para construir la lista final.
 
