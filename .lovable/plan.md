@@ -1,32 +1,88 @@
 
 
-## Añadir Video a Ejercicios
+## Reingeniería del Núcleo — Plan de Implementación
 
-### Concepto
-Añadir un campo `video_url` a las tablas `exercises` y `predefined_exercises` para que cada ejercicio pueda tener un enlace a video (YouTube, etc.). Durante el entreno, mostrar un icono de video junto al nombre del ejercicio si tiene URL configurada. En la página de ejercicios, mostrar el video embebido.
+### 1. Caché Global con TanStack Query (Anti Over-fetching)
 
-### Cambios
+**`src/App.tsx`**: Configurar `QueryClient` con `staleTime` y `gcTime` para datos estables:
 
-**1. DB Migration**: Añadir columna `video_url` (text, nullable) a `exercises` y `predefined_exercises`.
+```typescript
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000,  // 5 min
+      gcTime: 10 * 60 * 1000,
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
+```
 
-**2. `src/lib/api.ts`**: Actualizar `AnyExercise` para incluir `video_url`. Pasar el campo en `getAllExercises`.
+**`src/pages/SessionDetail.tsx`** y otros consumidores: Las queries de `all_exercises` y `profile` ya usan queryKeys compartidos. Solo hay que asegurar que no usen `refetchOnMount: true` y que las mutaciones invaliden selectivamente.
 
-**3. Formularios de ejercicio** (`Exercises.tsx`, `CreateExerciseDialog.tsx`): Añadir campo de input para URL de video en el form `ExForm`.
+### 2. Optimistic Updates + Offline Persistence
 
-**4. `src/pages/SessionDetail.tsx`**: En el header de cada ejercicio, si tiene `video_url`, mostrar un icono `Video` (de lucide) que abre el enlace en nueva pestaña.
+**`src/pages/SessionDetail.tsx`**: `addSetMutation` y `updateSetMutation` ya tienen optimistic updates implementados. Extender `updateSetMutation` para guardar en `localStorage` como fallback si la red falla.
 
-**5. `src/pages/Exercises.tsx`**: En cada fila de ejercicio, mostrar icono de video si existe. Al abrir edición o consulta, mostrar el video embebido (iframe de YouTube o enlace directo).
+Nuevo hook **`src/hooks/useOfflineQueue.ts`**:
+- Al fallar una mutación de set, almacenar `{ setId, data, timestamp }` en `localStorage` bajo la key `offline_queue`.
+- Al detectar reconexión (`navigator.onLine` + event listener `online`), reintentar las mutaciones pendientes y limpiar la cola.
+- Mostrar un badge discreto "Sin conexión — datos guardados localmente" cuando hay items en cola.
 
-**6. Nuevo componente `src/components/VideoPreview.tsx`**: Componente que detecta si la URL es de YouTube (extrae el ID) y muestra un iframe embebido, o un enlace directo para otras URLs.
+### 3. Validación de Sesión Auth + Listener
+
+**`src/contexts/AuthContext.tsx`**: El listener `onAuthStateChange` ya existe. Añadir detección de `TOKEN_REFRESHED` fallido y `SIGNED_OUT` inesperado:
+- Si el token expira durante una sesión activa, mostrar un `toast` con botón "Reconectar" que llame a `signInWithGoogle()`.
+- No limpiar el formulario/datos locales hasta que el usuario cierre sesión explícitamente.
+
+### 4. Robustez de Inputs y TypeScript Estricto
+
+**`src/pages/SessionDetail.tsx` — `NumericInput`**: Refactorizar para:
+- Reemplazar comas por puntos automáticamente.
+- Validar que el valor sea un número positivo finito.
+- Si `NaN` o negativo → tratar como `null`.
+
+```typescript
+const sanitize = (raw: string): number | null => {
+  const cleaned = raw.trim().replace(',', '.');
+  if (cleaned === '') return null;
+  const n = Number(cleaned);
+  return Number.isFinite(n) && n >= 0 ? n : null;
+};
+```
+
+**Eliminar `any`** en los casteos de:
+- `set.rpe` (ya existe en el tipo `sets` como `numeric | null`).
+- `re.planned_sets` → usar tipo `PlannedSet[]`.
+- `profile.is_approved` → ya está en el schema.
+
+### 5. Timer Automático por RPE
+
+**`src/components/RestTimer.tsx`**: Exponer un método `start(seconds)` via ref o contexto.
+
+**`src/pages/SessionDetail.tsx`**: Crear un ref al `RestTimer` y tras guardar RPE en `updateSetMutation.onSuccess`:
+- Si RPE > 8 → `restTimerRef.current.start(180)` (3 min).
+- Si RPE ≤ 8 y RPE ≥ 1 → `restTimerRef.current.start(90)` (90 seg).
+
+Modificar `RestTimer` para aceptar `ref` con `useImperativeHandle` que exponga `start(seconds)`.
+
+### 6. Manejo de Unidades (kg/lb)
+
+**`src/lib/constants.ts`**: Añadir tipo `WeightUnit = 'kg' | 'lb'` y factor de conversión `KG_TO_LB = 2.20462`.
+
+**`src/components/ui` / display layer**: Los valores en DB siempre se almacenan en kg. La UI lee la preferencia del perfil (`profiles.preferences.weight_unit`) y aplica conversión solo en la capa de visualización. Los inputs convierten de vuelta a kg antes de guardar.
 
 ### Archivos afectados
 
 | Archivo | Acción |
 |---|---|
-| DB migration | `video_url text` en `exercises` y `predefined_exercises` |
-| `src/lib/api.ts` | Incluir `video_url` en `AnyExercise` y funciones de create/update |
-| `src/components/CreateExerciseDialog.tsx` | Campo video_url en el form |
-| `src/pages/Exercises.tsx` | Campo video_url en form + icono en filas + preview |
-| `src/components/VideoPreview.tsx` | Nuevo: embeber YouTube o mostrar enlace |
-| `src/pages/SessionDetail.tsx` | Icono de video junto al nombre del ejercicio |
+| `src/App.tsx` | Configurar QueryClient con staleTime/gcTime |
+| `src/hooks/useOfflineQueue.ts` | Nuevo: cola offline con localStorage + retry |
+| `src/contexts/AuthContext.tsx` | Listener de token expirado con toast |
+| `src/pages/SessionDetail.tsx` | NumericInput robusto, eliminar `any`, auto-timer por RPE, integrar offline queue |
+| `src/components/RestTimer.tsx` | Exponer `start()` via `useImperativeHandle` |
+| `src/lib/constants.ts` | Tipos de unidad de peso |
+
+No se necesitan migraciones de base de datos.
 
