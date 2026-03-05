@@ -20,7 +20,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
-import { RestTimer, type RestTimerHandle } from '@/components/RestTimer';
+
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggestion';
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
@@ -162,7 +162,7 @@ export default function SessionDetail() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const sessionId = id!;
-  const restTimerRef = useRef<RestTimerHandle>(null);
+  
   const { enqueue: enqueueOffline, hasPending: hasOfflinePending } = useOfflineQueue();
 
   const { data: session } = useQuery({ queryKey: ['session', sessionId], queryFn: () => getSession(sessionId) });
@@ -281,11 +281,6 @@ export default function SessionDetail() {
       toast.info('Sin conexión — cambios guardados localmente');
     },
     onSuccess: async (_res, { setId, data, exerciseId }) => {
-      // Auto-timer by RPE
-      if (data.rpe != null && typeof data.rpe === 'number') {
-        const seconds = data.rpe > 8 ? 180 : 90;
-        restTimerRef.current?.start(seconds);
-      }
 
       if (exerciseId && (data.weight != null || data.reps != null || data.duration_seconds != null || data.distance_meters != null)) {
         const currentSet = allSets?.find(s => s.id === setId);
@@ -527,7 +522,7 @@ export default function SessionDetail() {
         </div>
       )}
 
-      <RestTimer ref={restTimerRef} />
+      
 
       {hasOfflinePending && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-card border border-border rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-lg">
