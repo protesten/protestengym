@@ -1,33 +1,26 @@
 
 
-## Protección de Ejercicios antes de Eliminar
+## Fix: YouTube video links blocked on desktop
 
-### Problema
-Al eliminar un ejercicio, se pueden romper datos históricos en `session_exercises`, `routine_exercises` y los análisis que dependen de ellos. No hay advertencia al usuario.
+### Problem
+When clicking the video icon (🔗) in the exercise list, the app opens the raw URL (e.g. `youtu.be/wjvPjjPXcvw`). YouTube's `youtu.be` short URLs return `ERR_BLOCKED_BY_RESPONSE` when opened from an embedded context or certain referrers on desktop. Mobile browsers handle the redirect differently, so it works there.
 
-### Solución
+### Solution
 
-**1. `src/lib/api.ts`** — Nueva función `getExerciseUsage(exerciseId)`:
-- Query a `session_exercises` contando cuántas sesiones lo usan
-- Query a `routine_exercises` contando cuántas rutinas lo usan
-- Retorna `{ sessionCount, routineCount }`
+**`src/components/VideoPreview.tsx`** — Add a helper that normalizes YouTube URLs to the canonical `https://www.youtube.com/watch?v=ID` format:
 
-**2. `src/pages/Exercises.tsx`** — Reemplazar el botón de eliminar directo por un flujo con AlertDialog:
-- Al pulsar eliminar, llamar a `getExerciseUsage`
-- Si no tiene uso → AlertDialog simple: "¿Eliminar ejercicio?"
-- Si tiene uso → AlertDialog detallado con:
-  - Info: "Este ejercicio se usa en X sesiones y Y rutinas"
-  - Opción 1: **"Eliminar todo"** — Borra el ejercicio y en cascada los datos relacionados
-  - Opción 2: **"Cancelar"**
-  - Advertencia: "Se perderán los datos históricos de este ejercicio en análisis y sesiones"
+- If the URL is `youtu.be/xxx` or any YouTube variant → convert to `https://www.youtube.com/watch?v=xxx`
+- Use this normalized URL for the external link (`<a>` tag)
+- The iframe already uses the embed URL, so no change needed there
 
-**3. Base de datos** — Migración para añadir `ON DELETE CASCADE` en las foreign keys de `session_exercises.exercise_id` y `routine_exercises.exercise_id` (si no lo tienen ya), para que al borrar el ejercicio se limpien las referencias automáticamente.
+**`src/pages/Exercises.tsx`** — Update the video icon `<a>` tag to also use the normalized URL instead of the raw `video_url`.
 
-### Archivos afectados
+### Changes
 
-| Archivo | Acción |
+| File | Action |
 |---|---|
-| `src/lib/api.ts` | Nueva función `getExerciseUsage` |
-| `src/pages/Exercises.tsx` | AlertDialog con advertencia antes de eliminar |
-| Migración SQL | Asegurar CASCADE en foreign keys |
+| `src/components/VideoPreview.tsx` | Export `normalizeYouTubeUrl` helper + use it in the fallback link |
+| `src/pages/Exercises.tsx` | Import and use `normalizeYouTubeUrl` for the video icon link |
+
+This is a small, focused fix — 2 files, ~10 lines changed.
 
