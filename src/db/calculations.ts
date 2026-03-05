@@ -5,6 +5,8 @@ import { es } from 'date-fns/locale';
 
 type TrackingType = 'weight_reps' | 'reps_only' | 'time_only' | 'distance_time';
 type WorkoutSet = Tables<'sets'>;
+type SessionRow = Tables<'sessions'>;
+type SessionExerciseRow = Tables<'session_exercises'>;
 
 /** Optional date range filter for analysis functions */
 export interface DateRange {
@@ -21,6 +23,97 @@ interface CalcExercise {
   secondary_muscle_ids: number[] | null;
 }
 
+// ============ Batch-fetch helpers ============
+
+/** Chunk an array into groups of `size` to avoid Supabase .in() limits */
+function chunk<T>(arr: T[], size: number): T[][] {
+  const result: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) {
+    result.push(arr.slice(i, i + size));
+  }
+  return result;
+}
+
+/** Fetch rows with .in() supporting >1000 items by chunking */
+async function fetchSessionExercisesIn(column: string, ids: string[]): Promise<SessionExerciseRow[]> {
+  if (!ids.length) return [];
+  const chunks = chunk(ids, 500);
+  const results: SessionExerciseRow[] = [];
+  for (const c of chunks) {
+    const { data } = await supabase.from('session_exercises').select('*').in(column as 'session_id', c);
+    if (data) results.push(...data);
+  }
+  return results;
+}
+
+async function fetchSetsIn(column: string, ids: string[]): Promise<WorkoutSet[]> {
+  if (!ids.length) return [];
+  const chunks = chunk(ids, 500);
+  const results: WorkoutSet[] = [];
+  for (const c of chunks) {
+    const { data } = await supabase.from('sets').select('*').in(column as 'session_exercise_id', c);
+    if (data) results.push(...data);
+  }
+  return results;
+}
+
+interface PrefetchedData {
+  sessions: SessionRow[];
+  sessionExercises: SessionExerciseRow[];
+  sets: WorkoutSet[];
+  // Indexed maps for fast lookup
+  sessionById: Map<string, SessionRow>;
+  seBySessionId: Map<string, SessionExerciseRow[]>;
+  setsBySeId: Map<string, WorkoutSet[]>;
+  seByExerciseId: Map<string, SessionExerciseRow[]>;
+}
+
+/** Batch-fetch all session data for a date range in 3 queries */
+async function prefetchSessionData(dateFrom: string, dateTo: string): Promise<PrefetchedData> {
+  // Query 1: sessions
+  const { data: sessions } = await supabase
+    .from('sessions').select('*')
+    .gte('date', dateFrom).lte('date', dateTo)
+    .order('date', { ascending: false });
+  const sessionList = sessions ?? [];
+
+  const sessionIds = sessionList.map(s => s.id);
+
+  // Query 2: session_exercises
+  const sessionExercises = await fetchSessionExercisesIn('session_id', sessionIds);
+
+  const seIds = sessionExercises.map(se => se.id);
+
+  // Query 3: sets
+  const sets = await fetchSetsIn('session_exercise_id', seIds);
+
+  // Build indexes
+  const sessionById = new Map(sessionList.map(s => [s.id, s]));
+
+  const seBySessionId = new Map<string, SessionExerciseRow[]>();
+  for (const se of sessionExercises) {
+    const arr = seBySessionId.get(se.session_id) ?? [];
+    arr.push(se);
+    seBySessionId.set(se.session_id, arr);
+  }
+
+  const setsBySeId = new Map<string, WorkoutSet[]>();
+  for (const s of sets) {
+    const arr = setsBySeId.get(s.session_exercise_id) ?? [];
+    arr.push(s);
+    setsBySeId.set(s.session_exercise_id, arr);
+  }
+
+  const seByExerciseId = new Map<string, SessionExerciseRow[]>();
+  for (const se of sessionExercises) {
+    const arr = seByExerciseId.get(se.exercise_id) ?? [];
+    arr.push(se);
+    seByExerciseId.set(se.exercise_id, arr);
+  }
+
+  return { sessions: sessionList, sessionExercises, sets, sessionById, seBySessionId, setsBySeId, seByExerciseId };
+}
+
 /** Fetch and merge both personal + predefined exercises */
 async function getAllExercisesForCalc(): Promise<CalcExercise[]> {
   const [{ data: personal }, { data: predefined }] = await Promise.all([
@@ -28,11 +121,13 @@ async function getAllExercisesForCalc(): Promise<CalcExercise[]> {
     supabase.from('predefined_exercises').select('*'),
   ]);
   const result: CalcExercise[] = [];
+  const seen = new Set<string>();
   for (const e of (personal ?? [])) {
+    seen.add(e.id);
     result.push({ id: e.id, name: e.name, tracking_type: e.tracking_type as TrackingType, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids });
   }
   for (const e of (predefined ?? [])) {
-    if (!result.find(r => r.id === e.id)) {
+    if (!seen.has(e.id)) {
       result.push({ id: e.id, name: e.name, tracking_type: e.tracking_type as TrackingType, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids });
     }
   }
@@ -48,15 +143,7 @@ async function findExercise(exerciseId: string): Promise<CalcExercise | null> {
   return null;
 }
 
-/** Helper: get sessions optionally filtered by date range */
-async function getSessionsInRange(range?: DateRange) {
-  let q = supabase.from('sessions').select('*').order('date', { ascending: false });
-  if (range) {
-    q = q.gte('date', range.from).lte('date', range.to);
-  }
-  const { data } = await q;
-  return data ?? [];
-}
+// ============ Core metric helpers ============
 
 export function setWorkMetric(set: WorkoutSet, trackingType: TrackingType): number {
   if (set.set_type !== 'work') return 0;
@@ -84,51 +171,80 @@ export function makeComparison(current: number, previous: number): Comparison {
   return { current, previous, diff, arrow: diff > 0 ? '↑' : diff < 0 ? '↓' : '=' };
 }
 
-async function exerciseMetricInRange(exerciseId: string, from: string, to: string, trackingType: TrackingType): Promise<number> {
-  const { data: sessions } = await supabase.from('sessions').select('id').gte('date', from).lte('date', to);
-  if (!sessions?.length) return 0;
-  const sessionIds = sessions.map(s => s.id);
-  const { data: ses } = await supabase.from('session_exercises').select('id').in('session_id', sessionIds).eq('exercise_id', exerciseId);
-  if (!ses?.length) return 0;
-  const seIds = ses.map(se => se.id);
-  const { data: sets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
-  if (!sets) return 0;
-  return sets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
+/** Compute metric for an exercise from pre-fetched data, filtering sessions by date range */
+function exerciseMetricFromPrefetched(
+  exerciseId: string,
+  trackingType: TrackingType,
+  fromDate: string,
+  toDate: string,
+  prefetched: PrefetchedData,
+): number {
+  const seList = prefetched.seByExerciseId.get(exerciseId) ?? [];
+  let total = 0;
+  for (const se of seList) {
+    const session = prefetched.sessionById.get(se.session_id);
+    if (!session || session.date < fromDate || session.date > toDate) continue;
+    const sets = prefetched.setsBySeId.get(se.id) ?? [];
+    for (const s of sets) {
+      total += setWorkMetric(s, trackingType);
+    }
+  }
+  return total;
 }
 
+// ============ Exercise Comparisons ============
+
 export async function getExerciseComparisons(exerciseId: string, trackingType: TrackingType, range?: DateRange) {
+  let allFrom: string, allTo: string;
+  let currFrom: string, currTo: string, prevFrom: string, prevTo: string;
+
   if (range) {
-    // With custom range: compare selected range vs same-length period before it
     const fromDate = new Date(range.from);
     const toDate = new Date(range.to);
     const days = Math.round((toDate.getTime() - fromDate.getTime()) / (1000 * 60 * 60 * 24));
-    const prevTo = format(subDays(fromDate, 1), 'yyyy-MM-dd');
-    const prevFrom = format(subDays(fromDate, days + 1), 'yyyy-MM-dd');
-    
-    const curr = await exerciseMetricInRange(exerciseId, range.from, range.to, trackingType);
-    const prev = await exerciseMetricInRange(exerciseId, prevFrom, prevTo, trackingType);
-    const comparison = makeComparison(curr, prev);
-    
-    return { lastSession: null as Comparison | null, week: comparison, month: null as Comparison | null };
+    currFrom = range.from;
+    currTo = range.to;
+    prevTo = format(subDays(fromDate, 1), 'yyyy-MM-dd');
+    prevFrom = format(subDays(fromDate, days + 1), 'yyyy-MM-dd');
+    allFrom = prevFrom;
+    allTo = currTo;
+  } else {
+    const today = format(new Date(), 'yyyy-MM-dd');
+    currTo = today;
+    currFrom = format(subDays(new Date(), 6), 'yyyy-MM-dd');
+    prevFrom = format(subDays(new Date(), 13), 'yyyy-MM-dd');
+    prevTo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
+    allFrom = format(subDays(new Date(), 60), 'yyyy-MM-dd'); // cover month comparisons too
+    allTo = today;
+  }
+
+  const prefetched = await prefetchSessionData(allFrom, allTo);
+
+  if (range) {
+    const curr = exerciseMetricFromPrefetched(exerciseId, trackingType, currFrom, currTo, prefetched);
+    const prev = exerciseMetricFromPrefetched(exerciseId, trackingType, prevFrom, prevTo, prefetched);
+    return { lastSession: null as Comparison | null, week: makeComparison(curr, prev), month: null as Comparison | null };
   }
 
   const today = format(new Date(), 'yyyy-MM-dd');
   const d7from = format(subDays(new Date(), 6), 'yyyy-MM-dd');
   const d7prevFrom = format(subDays(new Date(), 13), 'yyyy-MM-dd');
   const d7prevTo = format(subDays(new Date(), 7), 'yyyy-MM-dd');
-  const curr7 = await exerciseMetricInRange(exerciseId, d7from, today, trackingType);
-  const prev7 = await exerciseMetricInRange(exerciseId, d7prevFrom, d7prevTo, trackingType);
+  const curr7 = exerciseMetricFromPrefetched(exerciseId, trackingType, d7from, today, prefetched);
+  const prev7 = exerciseMetricFromPrefetched(exerciseId, trackingType, d7prevFrom, d7prevTo, prefetched);
   const week = makeComparison(curr7, prev7);
 
   const monthStart = format(startOfMonth(new Date()), 'yyyy-MM-dd');
   const prevMonthStart = format(startOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
   const prevMonthEnd = format(endOfMonth(subMonths(new Date(), 1)), 'yyyy-MM-dd');
-  const currMonth = await exerciseMetricInRange(exerciseId, monthStart, today, trackingType);
-  const prevMonth = await exerciseMetricInRange(exerciseId, prevMonthStart, prevMonthEnd, trackingType);
+  const currMonth = exerciseMetricFromPrefetched(exerciseId, trackingType, monthStart, today, prefetched);
+  const prevMonth = exerciseMetricFromPrefetched(exerciseId, trackingType, prevMonthStart, prevMonthEnd, prefetched);
   const month = makeComparison(currMonth, prevMonth);
 
   return { lastSession: null as Comparison | null, week, month };
 }
+
+// ============ Muscle Comparisons (optimized) ============
 
 export interface MuscleVolume {
   muscleId: number;
@@ -161,8 +277,13 @@ export async function getMuscleComparisons(period: '7d' | 'month', range?: DateR
     }
   }
 
-  const { data: muscles } = await supabase.from('muscles').select('*').order('id');
-  const exercises = await getAllExercisesForCalc();
+  // Batch-fetch: 5 queries total (muscles, exercises, sessions+se+sets)
+  const [{ data: muscles }, exercises, prefetched] = await Promise.all([
+    supabase.from('muscles').select('*').order('id'),
+    getAllExercisesForCalc(),
+    prefetchSessionData(prevFrom, currTo), // single fetch covering both periods
+  ]);
+
   if (!muscles || !exercises.length) return [];
 
   const result: MuscleVolume[] = [];
@@ -177,8 +298,8 @@ export async function getMuscleComparisons(period: '7d' | 'month', range?: DateR
       if (!isPrimary && !isSecondary) continue;
 
       const factor = isPrimary ? 1 : 0.5;
-      const currVal = await exerciseMetricInRange(ex.id, currFrom, currTo, ex.tracking_type);
-      const prevVal = await exerciseMetricInRange(ex.id, prevFrom, prevTo, ex.tracking_type);
+      const currVal = exerciseMetricFromPrefetched(ex.id, ex.tracking_type, currFrom, currTo, prefetched);
+      const prevVal = exerciseMetricFromPrefetched(ex.id, ex.tracking_type, prevFrom, prevTo, prefetched);
 
       if (ex.tracking_type === 'time_only') {
         currIso += currVal * factor;
@@ -202,6 +323,8 @@ export async function getMuscleComparisons(period: '7d' | 'month', range?: DateR
   return result;
 }
 
+// ============ Session Summary ============
+
 export interface SessionSummary {
   sessionId: string;
   date: string;
@@ -214,62 +337,85 @@ export interface SessionSummary {
   avgRPE: number | null;
 }
 
-export async function getSessionSummary(sessionId: string): Promise<SessionSummary> {
-  const { data: session } = await supabase.from('sessions').select('*').eq('id', sessionId).single();
-  const { data: sesExercises } = await supabase.from('session_exercises').select('*').eq('session_id', sessionId);
-  
+/** Compute session summary from pre-fetched data */
+function computeSessionSummary(
+  session: SessionRow,
+  exercises: CalcExercise[],
+  prefetched: PrefetchedData,
+): SessionSummary {
+  const sesExercises = prefetched.seBySessionId.get(session.id) ?? [];
   let strengthTotal = 0, isometricTotal = 0, cardioTime = 0, cardioDistance = 0;
-  let totalWorkSets = 0;
-  let rpeSum = 0, rpeCount = 0;
+  let totalWorkSets = 0, rpeSum = 0, rpeCount = 0;
 
-  if (sesExercises) {
-    for (const se of sesExercises) {
-      const exercise = await findExercise(se.exercise_id);
-      if (!exercise) continue;
-      const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
-      const workSets = (sets ?? []).filter(s => s.set_type === 'work');
-      totalWorkSets += workSets.length;
+  const exMap = new Map(exercises.map(e => [e.id, e]));
 
-      for (const s of workSets) {
-        if (s.rpe != null) { rpeSum += Number(s.rpe); rpeCount++; }
-      }
+  for (const se of sesExercises) {
+    const exercise = exMap.get(se.exercise_id);
+    if (!exercise) continue;
+    const sets = prefetched.setsBySeId.get(se.id) ?? [];
+    const workSets = sets.filter(s => s.set_type === 'work');
+    totalWorkSets += workSets.length;
 
-      switch (exercise.tracking_type) {
-        case 'weight_reps':
-          strengthTotal += workSets.reduce((s, set) => s + (set.weight ?? 0) * (set.reps ?? 0), 0);
-          break;
-        case 'reps_only':
-          strengthTotal += workSets.reduce((s, set) => s + (set.reps ?? 0), 0);
-          break;
-        case 'time_only':
-          isometricTotal += workSets.reduce((s, set) => s + (set.duration_seconds ?? 0), 0);
-          break;
-        case 'distance_time':
-          cardioTime += workSets.reduce((s, set) => s + (set.duration_seconds ?? 0), 0);
-          cardioDistance += workSets.reduce((s, set) => s + (set.distance_meters ?? 0), 0);
-          break;
-      }
+    for (const s of workSets) {
+      if (s.rpe != null) { rpeSum += Number(s.rpe); rpeCount++; }
+    }
+
+    switch (exercise.tracking_type) {
+      case 'weight_reps':
+        strengthTotal += workSets.reduce((sum, s) => sum + (s.weight ?? 0) * (s.reps ?? 0), 0);
+        break;
+      case 'reps_only':
+        strengthTotal += workSets.reduce((sum, s) => sum + (s.reps ?? 0), 0);
+        break;
+      case 'time_only':
+        isometricTotal += workSets.reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0);
+        break;
+      case 'distance_time':
+        cardioTime += workSets.reduce((sum, s) => sum + (s.duration_seconds ?? 0), 0);
+        cardioDistance += workSets.reduce((sum, s) => sum + (s.distance_meters ?? 0), 0);
+        break;
     }
   }
 
   return {
-    sessionId,
-    date: session?.date ?? '',
+    sessionId: session.id,
+    date: session.date,
     strengthTotal,
     isometricTotal,
     cardioTime,
     cardioDistance,
-    exerciseCount: sesExercises?.length ?? 0,
+    exerciseCount: sesExercises.length,
     totalWorkSets,
     avgRPE: rpeCount > 0 ? Math.round(rpeSum / rpeCount * 10) / 10 : null,
   };
 }
 
+export async function getSessionSummary(sessionId: string): Promise<SessionSummary> {
+  const { data: session } = await supabase.from('sessions').select('*').eq('id', sessionId).single();
+  if (!session) return { sessionId, date: '', strengthTotal: 0, isometricTotal: 0, cardioTime: 0, cardioDistance: 0, exerciseCount: 0, totalWorkSets: 0, avgRPE: null };
+
+  const exercises = await getAllExercisesForCalc();
+  const prefetched = await prefetchSessionData(session.date, session.date);
+
+  return computeSessionSummary(session, exercises, prefetched);
+}
+
 export async function getAllSessionSummaries(): Promise<SessionSummary[]> {
   const { data: sessions } = await supabase.from('sessions').select('*').order('date', { ascending: false });
-  if (!sessions) return [];
-  return Promise.all(sessions.map(s => getSessionSummary(s.id)));
+  if (!sessions?.length) return [];
+
+  const oldest = sessions[sessions.length - 1].date;
+  const newest = sessions[0].date;
+
+  const [exercises, prefetched] = await Promise.all([
+    getAllExercisesForCalc(),
+    prefetchSessionData(oldest, newest),
+  ]);
+
+  return sessions.map(s => computeSessionSummary(s, exercises, prefetched));
 }
+
+// ============ Exercise History ============
 
 export interface ExerciseHistoryEntry {
   date: string;
@@ -279,22 +425,41 @@ export interface ExerciseHistoryEntry {
 }
 
 export async function getExerciseHistory(exerciseId: string, trackingType: TrackingType, range?: DateRange): Promise<ExerciseHistoryEntry[]> {
-  const sessions = await getSessionsInRange(range);
-  if (!sessions.length) return [];
-  const results: ExerciseHistoryEntry[] = [];
-
-  for (const session of sessions) {
-    const { data: ses } = await supabase.from('session_exercises').select('id').eq('session_id', session.id).eq('exercise_id', exerciseId);
-    if (!ses?.length) continue;
-    const seIds = ses.map(se => se.id);
-    const { data: sets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
-    const workSets = (sets ?? []).filter(s => s.set_type === 'work');
-    if (!workSets.length) continue;
-    const totalMetric = workSets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
-    results.push({ date: session.date, sessionId: session.id, sets: workSets, totalMetric });
+  let dateFrom: string, dateTo: string;
+  if (range) {
+    dateFrom = range.from;
+    dateTo = range.to;
+  } else {
+    dateTo = format(new Date(), 'yyyy-MM-dd');
+    dateFrom = format(subMonths(new Date(), 12), 'yyyy-MM-dd'); // last 12 months
   }
 
-  return results;
+  const prefetched = await prefetchSessionData(dateFrom, dateTo);
+  const seList = prefetched.seByExerciseId.get(exerciseId) ?? [];
+  if (!seList.length) return [];
+
+  // Group by session, ordered by date desc
+  const sessionMap = new Map<string, { date: string; sets: WorkoutSet[] }>();
+  for (const se of seList) {
+    const session = prefetched.sessionById.get(se.session_id);
+    if (!session) continue;
+    const sets = (prefetched.setsBySeId.get(se.id) ?? []).filter(s => s.set_type === 'work');
+    if (!sets.length) continue;
+    const existing = sessionMap.get(session.id);
+    if (existing) {
+      existing.sets.push(...sets);
+    } else {
+      sessionMap.set(session.id, { date: session.date, sets: [...sets] });
+    }
+  }
+
+  const results: ExerciseHistoryEntry[] = [];
+  for (const [sessionId, { date, sets }] of sessionMap) {
+    const totalMetric = sets.reduce((sum, s) => sum + setWorkMetric(s, trackingType), 0);
+    results.push({ date, sessionId, sets, totalMetric });
+  }
+
+  return results.sort((a, b) => b.date.localeCompare(a.date));
 }
 
 export function formatSetSummary(sets: WorkoutSet[], trackingType: TrackingType): string {
@@ -316,6 +481,8 @@ export function formatSetSummary(sets: WorkoutSet[], trackingType: TrackingType)
   }
 }
 
+// ============ Personal Records (optimized) ============
+
 export interface PersonalRecord {
   exerciseId: string;
   exerciseName: string;
@@ -324,23 +491,35 @@ export interface PersonalRecord {
 }
 
 export async function getPersonalRecords(range?: DateRange): Promise<PersonalRecord[]> {
-  const exercises = await getAllExercisesForCalc();
-  const allSessions = await getSessionsInRange(range);
-  if (!exercises.length || !allSessions.length) return [];
-  const sessionIds = new Set(allSessions.map(s => s.id));
-  const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
+  let dateFrom: string, dateTo: string;
+  if (range) {
+    dateFrom = range.from;
+    dateTo = range.to;
+  } else {
+    dateTo = format(new Date(), 'yyyy-MM-dd');
+    dateFrom = format(subMonths(new Date(), 24), 'yyyy-MM-dd');
+  }
+
+  const [exercises, prefetched] = await Promise.all([
+    getAllExercisesForCalc(),
+    prefetchSessionData(dateFrom, dateTo),
+  ]);
+  if (!exercises.length || !prefetched.sessions.length) return [];
+
   const results: PersonalRecord[] = [];
 
   for (const ex of exercises) {
-    const { data: sesExs } = await supabase.from('session_exercises').select('*').eq('exercise_id', ex.id);
-    if (!sesExs?.length) continue;
+    const seList = prefetched.seByExerciseId.get(ex.id) ?? [];
+    if (!seList.length) continue;
 
     const allSets: { set: WorkoutSet; date: string }[] = [];
-    for (const se of sesExs) {
-      if (!sessionIds.has(se.session_id)) continue;
-      const date = sessionDateMap.get(se.session_id) ?? '';
-      const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
-      (sets ?? []).filter(s => s.set_type === 'work').forEach(s => allSets.push({ set: s, date }));
+    for (const se of seList) {
+      const session = prefetched.sessionById.get(se.session_id);
+      if (!session) continue;
+      const sets = prefetched.setsBySeId.get(se.id) ?? [];
+      for (const s of sets) {
+        if (s.set_type === 'work') allSets.push({ set: s, date: session.date });
+      }
     }
     if (!allSets.length) continue;
 
@@ -406,6 +585,8 @@ export async function getPersonalRecords(range?: DateRange): Promise<PersonalRec
   return results;
 }
 
+// ============ Period Summaries (optimized) ============
+
 export interface PeriodSummary {
   label: string;
   from: string;
@@ -420,43 +601,12 @@ export interface PeriodSummary {
 }
 
 export async function getPeriodSummaries(granularity: 'week' | 'month', range?: DateRange): Promise<PeriodSummary[]> {
-  // If a custom range is provided, build a single-period summary for it
-  if (range) {
-    const { data: sessions } = await supabase.from('sessions').select('*').gte('date', range.from).lte('date', range.to);
-    let strengthTotal = 0, isometricTotal = 0, cardioTime = 0;
-    let exerciseCount = 0, totalWorkSets = 0;
-    let rpeSum = 0, rpeCount = 0;
-
-    if (sessions) {
-      for (const session of sessions) {
-        const summary = await getSessionSummary(session.id);
-        strengthTotal += summary.strengthTotal;
-        isometricTotal += summary.isometricTotal;
-        cardioTime += summary.cardioTime;
-        exerciseCount += summary.exerciseCount;
-        totalWorkSets += summary.totalWorkSets;
-        if (summary.avgRPE != null) { rpeSum += summary.avgRPE; rpeCount++; }
-      }
-    }
-
-    return [{
-      label: `${range.from} → ${range.to}`,
-      from: range.from,
-      to: range.to,
-      sessionCount: sessions?.length ?? 0,
-      strengthTotal,
-      isometricTotal,
-      cardioTime,
-      exerciseCount,
-      totalWorkSets,
-      avgRPE: rpeCount > 0 ? Math.round(rpeSum / rpeCount * 10) / 10 : null,
-    }];
-  }
-
   const now = new Date();
   const periods: { label: string; from: string; to: string }[] = [];
 
-  if (granularity === 'week') {
+  if (range) {
+    periods.push({ label: `${range.from} → ${range.to}`, from: range.from, to: range.to });
+  } else if (granularity === 'week') {
     for (let i = 0; i < 8; i++) {
       const weekStart = startOfWeek(subWeeks(now, i), { locale: es, weekStartsOn: 1 });
       const weekEnd = endOfWeek(subWeeks(now, i), { locale: es, weekStartsOn: 1 });
@@ -479,31 +629,40 @@ export async function getPeriodSummaries(granularity: 'week' | 'month', range?: 
     }
   }
 
+  // Single batch fetch covering the entire range
+  const allFrom = periods[periods.length - 1].from;
+  const allTo = periods[0].to;
+
+  const [exercises, prefetched] = await Promise.all([
+    getAllExercisesForCalc(),
+    prefetchSessionData(allFrom, allTo),
+  ]);
+
   const results: PeriodSummary[] = [];
 
   for (const period of periods) {
-    const { data: sessions } = await supabase.from('sessions').select('*').gte('date', period.from).lte('date', period.to);
+    // Filter sessions in this period
+    const periodSessions = prefetched.sessions.filter(s => s.date >= period.from && s.date <= period.to);
+
     let strengthTotal = 0, isometricTotal = 0, cardioTime = 0;
     let exerciseCount = 0, totalWorkSets = 0;
     let rpeSum = 0, rpeCount = 0;
 
-    if (sessions) {
-      for (const session of sessions) {
-        const summary = await getSessionSummary(session.id);
-        strengthTotal += summary.strengthTotal;
-        isometricTotal += summary.isometricTotal;
-        cardioTime += summary.cardioTime;
-        exerciseCount += summary.exerciseCount;
-        totalWorkSets += summary.totalWorkSets;
-        if (summary.avgRPE != null) { rpeSum += summary.avgRPE; rpeCount++; }
-      }
+    for (const session of periodSessions) {
+      const summary = computeSessionSummary(session, exercises, prefetched);
+      strengthTotal += summary.strengthTotal;
+      isometricTotal += summary.isometricTotal;
+      cardioTime += summary.cardioTime;
+      exerciseCount += summary.exerciseCount;
+      totalWorkSets += summary.totalWorkSets;
+      if (summary.avgRPE != null) { rpeSum += summary.avgRPE; rpeCount++; }
     }
 
     results.push({
       label: period.label,
       from: period.from,
       to: period.to,
-      sessionCount: sessions?.length ?? 0,
+      sessionCount: periodSessions.length,
       strengthTotal,
       isometricTotal,
       cardioTime,
@@ -538,22 +697,18 @@ export async function getWeeklyMuscleSets(weeksBack: number = 0, range?: DateRan
     to = format(weekEnd, 'yyyy-MM-dd');
   }
 
-  const { data: muscles } = await supabase.from('muscles').select('*').order('id');
-  const exercises = await getAllExercisesForCalc();
-  const { data: sessions } = await supabase.from('sessions').select('id').gte('date', from).lte('date', to);
-  if (!muscles || !sessions?.length) return [];
+  const [{ data: muscles }, exercises, prefetched] = await Promise.all([
+    supabase.from('muscles').select('*').order('id'),
+    getAllExercisesForCalc(),
+    prefetchSessionData(from, to),
+  ]);
 
-  const sessionIds = sessions.map(s => s.id);
-  const { data: sesExs } = await supabase.from('session_exercises').select('*').in('session_id', sessionIds);
-  if (!sesExs?.length) return [];
-
-  const seIds = sesExs.map(se => se.id);
-  const { data: allSets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
-  if (!allSets) return [];
+  if (!muscles || !prefetched.sessions.length) return [];
 
   const setsPerExercise = new Map<string, number>();
-  for (const se of sesExs) {
-    const workCount = allSets.filter(s => s.session_exercise_id === se.id && s.set_type === 'work').length;
+  for (const se of prefetched.sessionExercises) {
+    const sets = prefetched.setsBySeId.get(se.id) ?? [];
+    const workCount = sets.filter(s => s.set_type === 'work').length;
     setsPerExercise.set(se.exercise_id, (setsPerExercise.get(se.exercise_id) ?? 0) + workCount);
   }
 
@@ -592,32 +747,42 @@ export function calculate1RM(weight: number, reps: number): number {
 }
 
 export async function getAll1RMs(range?: DateRange): Promise<ExerciseRM[]> {
-  const exercises = await getAllExercisesForCalc();
-  const allSessions = await getSessionsInRange(range);
-  if (!exercises.length || !allSessions.length) return [];
-  const sessionIds = new Set(allSessions.map(s => s.id));
-  const sessionDateMap = new Map(allSessions.map(s => [s.id, s.date]));
+  let dateFrom: string, dateTo: string;
+  if (range) {
+    dateFrom = range.from;
+    dateTo = range.to;
+  } else {
+    dateTo = format(new Date(), 'yyyy-MM-dd');
+    dateFrom = format(subMonths(new Date(), 24), 'yyyy-MM-dd');
+  }
+
+  const [exercises, prefetched] = await Promise.all([
+    getAllExercisesForCalc(),
+    prefetchSessionData(dateFrom, dateTo),
+  ]);
+  if (!exercises.length || !prefetched.sessions.length) return [];
+
   const results: ExerciseRM[] = [];
 
   for (const ex of exercises) {
     if (ex.tracking_type !== 'weight_reps') continue;
-    const { data: sesExs } = await supabase.from('session_exercises').select('*').eq('exercise_id', ex.id);
-    if (!sesExs?.length) continue;
+    const seList = prefetched.seByExerciseId.get(ex.id) ?? [];
+    if (!seList.length) continue;
 
-    let best1RM = 0;
-    let bestWeight = 0, bestReps = 0, bestDate = '';
+    let best1RM = 0, bestWeight = 0, bestReps = 0, bestDate = '';
 
-    for (const se of sesExs) {
-      if (!sessionIds.has(se.session_id)) continue;
-      const date = sessionDateMap.get(se.session_id) ?? '';
-      const { data: sets } = await supabase.from('sets').select('*').eq('session_exercise_id', se.id);
-      for (const s of (sets ?? []).filter(s => s.set_type === 'work')) {
+    for (const se of seList) {
+      const session = prefetched.sessionById.get(se.session_id);
+      if (!session) continue;
+      const sets = prefetched.setsBySeId.get(se.id) ?? [];
+      for (const s of sets) {
+        if (s.set_type !== 'work') continue;
         const rm = calculate1RM(s.weight ?? 0, s.reps ?? 0);
         if (rm > best1RM) {
           best1RM = rm;
           bestWeight = s.weight ?? 0;
           bestReps = s.reps ?? 0;
-          bestDate = date;
+          bestDate = session.date;
         }
       }
     }
@@ -635,26 +800,37 @@ export interface RM1History {
 }
 
 export async function get1RMHistory(exerciseId: string, range?: DateRange): Promise<RM1History[]> {
-  let q = supabase.from('sessions').select('*').order('date', { ascending: true });
+  let dateFrom: string, dateTo: string;
   if (range) {
-    q = q.gte('date', range.from).lte('date', range.to);
+    dateFrom = range.from;
+    dateTo = range.to;
+  } else {
+    dateTo = format(new Date(), 'yyyy-MM-dd');
+    dateFrom = format(subMonths(new Date(), 24), 'yyyy-MM-dd');
   }
-  const { data: allSessions } = await q;
-  if (!allSessions) return [];
 
-  const results: RM1History[] = [];
-  for (const session of allSessions) {
-    const { data: ses } = await supabase.from('session_exercises').select('id').eq('session_id', session.id).eq('exercise_id', exerciseId);
-    if (!ses?.length) continue;
-    const { data: sets } = await supabase.from('sets').select('*').in('session_exercise_id', ses.map(s => s.id));
-    let best = 0;
-    for (const s of (sets ?? []).filter(s => s.set_type === 'work')) {
+  const prefetched = await prefetchSessionData(dateFrom, dateTo);
+  const seList = prefetched.seByExerciseId.get(exerciseId) ?? [];
+  if (!seList.length) return [];
+
+  // Group by session date
+  const dateMap = new Map<string, number>();
+  for (const se of seList) {
+    const session = prefetched.sessionById.get(se.session_id);
+    if (!session) continue;
+    const sets = prefetched.setsBySeId.get(se.id) ?? [];
+    for (const s of sets) {
+      if (s.set_type !== 'work') continue;
       const rm = calculate1RM(s.weight ?? 0, s.reps ?? 0);
-      if (rm > best) best = rm;
+      if (rm > (dateMap.get(session.date) ?? 0)) {
+        dateMap.set(session.date, rm);
+      }
     }
-    if (best > 0) results.push({ date: session.date, estimated1RM: best });
   }
-  return results;
+
+  return Array.from(dateMap.entries())
+    .map(([date, estimated1RM]) => ({ date, estimated1RM }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
 
 // ============ Streak & Consistency ============
@@ -731,8 +907,8 @@ export async function checkForPR(exerciseId: string, trackingType: TrackingType,
   if (!sesExs?.length) return { isPR: false, prType: null, previousBest: 0, newValue: 0 };
 
   const seIds = sesExs.map(se => se.id);
-  const { data: allSets } = await supabase.from('sets').select('*').in('session_exercise_id', seIds);
-  const historicalSets = (allSets ?? []).filter(s => s.set_type === 'work' && s.id !== currentSet.id);
+  const allSets = await fetchSetsIn('session_exercise_id', seIds);
+  const historicalSets = allSets.filter(s => s.set_type === 'work' && s.id !== currentSet.id);
 
   if (currentSet.set_type !== 'work') return { isPR: false, prType: null, previousBest: 0, newValue: 0 };
 
