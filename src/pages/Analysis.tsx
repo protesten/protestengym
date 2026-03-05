@@ -13,11 +13,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { ComparisonRow } from '@/components/ComparisonRow';
 import { Progress } from '@/components/ui/progress';
 import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
-import { StreakCard } from '@/components/StreakCard';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock, Ruler } from 'lucide-react';
 import { BodyEvolutionPanel } from '@/components/BodyEvolutionPanel';
+import { RelativeStrengthPanel } from '@/components/RelativeStrengthPanel';
 import { Skeleton } from '@/components/ui/skeleton';
 
 function ArrowBadge({ c }: { c: Comparison }) {
@@ -120,7 +120,7 @@ export default function Analysis() {
           <TabsTrigger value="1rm" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>
           <TabsTrigger value="prs" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>
           <TabsTrigger value="body" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Cuerpo</TabsTrigger>
-          <TabsTrigger value="streak" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Racha</TabsTrigger>
+          <TabsTrigger value="relative" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">F. Relativa</TabsTrigger>
           <TabsTrigger value="summary" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
         </TabsList>
 
@@ -269,8 +269,8 @@ export default function Analysis() {
           <BodyEvolutionPanel dateRange={dateRange} />
         </TabsContent>
 
-        <TabsContent value="streak" className="mt-4">
-          <StreakCard />
+        <TabsContent value="relative" className="mt-4">
+          <RelativeStrengthPanel dateRange={dateRange} />
         </TabsContent>
 
         <TabsContent value="summary" className="mt-4 space-y-4">
