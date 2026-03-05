@@ -1,35 +1,65 @@
 
 
-## Fix: Rutinas completadas siguen apareciendo como activas
+## Rediseño visual de la vista de sesión de entrenamiento
 
-### Problema
+Basándome en la imagen de referencia, el objetivo es reducir ruido visual y mejorar la jerarquía de información.
 
-`TodayRoutineSuggestion` muestra todas las rutinas programadas para la semana actual, pero nunca comprueba si ya existe una sesión de hoy con ese `routine_id`. Así que aunque hayas completado la rutina, sigue apareciendo con el botón de Play.
+### Cambios principales
 
-### Solución
+| Cambio | Descripción |
+|---|---|
+| **Barra de progreso** | Añadir barra horizontal en la parte superior que muestra el progreso (ejercicios con series registradas / total ejercicios) |
+| **Header simplificado** | Fecha a la izquierda, solo iconos de compartir y eliminar sesión a la derecha. Mover CSV/duplicar/descargar al menú de compartir o eliminarlos del header |
+| **Notas como input inline** | Cambiar el botón de notas por un `Input` placeholder "Notas..." siempre visible, más limpio |
+| **Ejercicio activo destacado** | El ejercicio expandido muestra un card con borde más prominente. Encabezados de sección: "OBJETIVO DE SESIÓN" y "REGISTRO DE SERIES" como labels uppercase pequeñas |
+| **Ejercicios colapsados compactos** | Los ejercicios no expandidos muestran: nombre + badge de objetivo (peso×reps) en una línea, sin acordeón pesado |
+| **Sección "SIGUIENTES EJERCICIOS"** | Los ejercicios sin series registradas aparecen listados al final en una sección separada con iconos de acción inline (copiar, completar, info) |
+| **Botón "+ Serie" más prominente** | Estilo filled con gradiente primario en vez de outline dashed |
 
-En la query del componente, después de obtener los `routineIds` programados, consultar las sesiones de hoy y filtrar las rutinas que ya tengan una sesión registrada. Si todas están completadas, el componente no se renderiza.
-
-### Cambios
+### Archivo afectado
 
 | Archivo | Acción |
 |---|---|
-| `src/components/TodayRoutineSuggestion.tsx` | Tras obtener `routineIds`, consultar `sessions` filtrando por `date = hoy` y descartar las rutinas cuyo `routine_id` ya aparezca en una sesión de hoy |
+| `src/pages/SessionDetail.tsx` | Reestructurar el render: header, progreso, ejercicio activo, colapsados, siguientes |
 
-Cambio de ~10 líneas en 1 archivo. La lógica adicional:
+### Estructura visual resultante
 
-```typescript
-// 4.5 Check which routines already have a session today
-const today = now.toISOString().slice(0, 10);
-const { data: todaySessions } = await supabase
-  .from('sessions')
-  .select('routine_id')
-  .eq('date', today);
-const completedIds = new Set(todaySessions?.map(s => s.routine_id).filter(Boolean));
-// Filter out completed routines
-const pendingIds = routineIds.filter(id => !completedIds.has(id));
-if (!pendingIds.length) return null;
+```text
+┌─────────────────────────────────┐
+│ ████████████████░░░░  (progreso)│
+│ 2026-03-05 📅        🔗  🗑    │
+│ [Notas...                     ] │
+├─────────────────────────────────┤
+│ ┌─ Ejercicio Activo ──────────┐ │
+│ │ Hip Thrust...    🎥 📋 ⚙ ⋮ │ │
+│ │ Prev: 85kg×12, 11           │ │
+│ │                             │ │
+│ │ OBJETIVO DE SESIÓN          │ │
+│ │ Hipertrofia: 91.5kg (8-12)  │ │
+│ │                             │ │
+│ │ REGISTRO DE SERIES          │ │
+│ │ [T] 91.5 kg  10 reps  Máx  │ │
+│ │ [T] 91.5 kg  10 reps  Máx  │ │
+│ │ [══ + Serie ══════════════] │ │
+│ └─────────────────────────────┘ │
+│                                 │
+│ ▿ Sentadilla hack...           │
+│   🔥 51kg · 8-12r              │
+│                                 │
+│ ▿ Prensa inclinada...          │
+│   🔥 16.5kg · 8-12r            │
+│                                 │
+│ SIGUIENTES EJERCICIOS           │
+│ 2. Curl femoral...    📋 ✅ ℹ  │
+│ 3. Sentadilla hack... 📋 ⚠ ℹ  │
+└─────────────────────────────────┘
 ```
 
-Luego usar `pendingIds` en lugar de `routineIds` para construir la lista final.
+### Detalles de implementación
+
+- **Barra de progreso**: calcular `completedCount` (ejercicios con ≥1 serie con datos) vs `total` y renderizar un `<Progress>` de radix
+- **Ejercicios divididos en 3 grupos**: activo (expandido, el primero sin completar o el que el usuario toque), colapsados (con series), y "siguientes" (sin series aún)
+- **Header**: reducir a 2 iconos (share, delete). El resto se agrupa en un dropdown o se quita
+- **Notas**: `Input` directo con `onBlur` para guardar, sin estado de edición separado
+- Se mantiene toda la lógica existente de sets, mutations, PR detection, offline queue
 
