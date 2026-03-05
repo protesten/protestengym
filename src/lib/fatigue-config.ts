@@ -66,7 +66,7 @@ export function computeFatigue(
   };
 
   for (const session of sessions) {
-    const sessionTime = new Date(session.date + 'T12:00:00').getTime();
+    const sessionTime = new Date(session.date + 'T00:00:00').getTime();
     const hoursAgo = (now - sessionTime) / 3_600_000;
     if (hoursAgo < 0 || hoursAgo > 14 * 24) continue;
 
