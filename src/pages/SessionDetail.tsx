@@ -647,19 +647,28 @@ export default function SessionDetail() {
             <CheckCircle2 className="h-4 w-4" />
             Sesión completada
           </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="text-xs text-muted-foreground hover:text-foreground h-7"
-            onClick={async () => {
-              await updateSession(sessionId, { is_completed: false } as any);
-              invalidateSession();
-              queryClient.invalidateQueries({ queryKey: ['sessions'] });
-              toast.info('Sesión reabierta');
-            }}
-          >
-            Reabrir
-          </Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground hover:text-foreground h-7">
+                Reabrir
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-card border-border rounded-2xl">
+              <AlertDialogHeader>
+                <AlertDialogTitle>¿Reabrir sesión?</AlertDialogTitle>
+                <AlertDialogDescription>La sesión dejará de contar en tus estadísticas y análisis hasta que la finalices de nuevo.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                <AlertDialogAction onClick={async () => {
+                  await updateSession(sessionId, { is_completed: false } as any);
+                  invalidateSession();
+                  queryClient.invalidateQueries({ queryKey: ['sessions'] });
+                  toast.info('Sesión reabierta');
+                }}>Reabrir</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </div>
       )}
 
