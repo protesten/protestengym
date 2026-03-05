@@ -508,6 +508,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_approved_user: { Args: never; Returns: boolean }
       owns_program: { Args: { _program_id: string }; Returns: boolean }
       owns_routine: { Args: { _routine_id: string }; Returns: boolean }
       owns_session: { Args: { _session_id: string }; Returns: boolean }
