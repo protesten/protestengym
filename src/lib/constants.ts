@@ -58,3 +58,7 @@ export type PlannedSet = {
   min_distance_meters: number | null;
   max_distance_meters: number | null;
 };
+
+export type WeightUnit = 'kg' | 'lb';
+export const KG_TO_LB = 2.20462;
+export const LB_TO_KG = 1 / KG_TO_LB;

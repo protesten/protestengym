@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHandle } from 'react';
 import { X, Play, Pause, RotateCcw, Timer } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -11,7 +11,11 @@ function formatTime(seconds: number) {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function RestTimer() {
+export interface RestTimerHandle {
+  start: (seconds: number) => void;
+}
+
+export const RestTimer = forwardRef<RestTimerHandle>(function RestTimer(_props, ref) {
   const [isOpen, setIsOpen] = useState(false);
   const [totalTime, setTotalTime] = useState(90);
   const [remaining, setRemaining] = useState(0);
@@ -30,6 +34,8 @@ export function RestTimer() {
     setIsRunning(true);
     setIsOpen(true);
   }, [stop]);
+
+  useImperativeHandle(ref, () => ({ start }), [start]);
 
   useEffect(() => {
     if (!isRunning) return;
@@ -127,4 +133,4 @@ export function RestTimer() {
       )}
     </div>
   );
-}
+});
