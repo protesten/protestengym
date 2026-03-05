@@ -642,9 +642,24 @@ export default function SessionDetail() {
         </Button>
       )}
       {(session as any).is_completed && (
-        <div className="mt-4 flex items-center justify-center gap-2 py-2 text-sm font-bold text-green-500">
-          <CheckCircle2 className="h-4 w-4" />
-          Sesión completada
+        <div className="mt-4 flex items-center justify-between rounded-xl bg-green-500/10 border border-green-500/20 px-4 py-2.5">
+          <div className="flex items-center gap-2 text-sm font-bold text-green-500">
+            <CheckCircle2 className="h-4 w-4" />
+            Sesión completada
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-xs text-muted-foreground hover:text-foreground h-7"
+            onClick={async () => {
+              await updateSession(sessionId, { is_completed: false } as any);
+              invalidateSession();
+              queryClient.invalidateQueries({ queryKey: ['sessions'] });
+              toast.info('Sesión reabierta');
+            }}
+          >
+            Reabrir
+          </Button>
         </div>
       )}
 
