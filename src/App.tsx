@@ -21,6 +21,7 @@ import MeasurementsReport from "./pages/MeasurementsReport";
 import SessionCalendar from "./pages/SessionCalendar";
 import Auth from "./pages/Auth";
 import Fatigue from "./pages/Fatigue";
+import Coach from "./pages/Coach";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="/calendar" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><SessionCalendar /><BottomNav /></div></ProtectedRoute>} />
             <Route path="/profile" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Profile /><BottomNav /></div></ProtectedRoute>} />
             <Route path="/fatigue" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Fatigue /><BottomNav /></div></ProtectedRoute>} />
+            <Route path="/coach" element={<ProtectedRoute><div className="min-h-screen pb-14 w-full overflow-x-hidden"><Coach /><BottomNav /></div></ProtectedRoute>} />
             <Route path="*" element={<NotFound />} />
           </Routes>
         </BrowserRouter>
