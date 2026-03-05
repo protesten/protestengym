@@ -1,52 +1,33 @@
-## Evolución de Fuerza Relativa — Nueva sección en Análisis
 
-### Concepto
 
-Nueva pestaña "F. Relativa" en la página de Análisis que muestra el ratio 1RM/Peso Corporal a lo largo del tiempo, con filtro por ejercicio, tarjeta de "Top Ratio Histórico" e interpretación del Coach IA.
+## Protección de Ejercicios antes de Eliminar
 
-### Cambios
+### Problema
+Al eliminar un ejercicio, se pueden romper datos históricos en `session_exercises`, `routine_exercises` y los análisis que dependen de ellos. No hay advertencia al usuario.
 
-**1. `src/db/calculations.ts**` — Nueva función `getRelativeStrengthHistory`:
+### Solución
 
-- Recibe `exerciseId` y `DateRange` opcional
-- Reutiliza `prefetchSessionData` + query a `body_measurements` (último `weight_kg` por fecha)
-- Para cada sesión del ejercicio, calcula `best1RM / bodyWeight` del día más cercano
-- Retorna `{ date, ratio, estimated1RM, bodyWeight }[]` y `topRatio` con el máximo histórico
-- Todo en 4-5 queries máximo (ya batch-fetched), cómputo en memoria con `useMemo` en el componente
+**1. `src/lib/api.ts`** — Nueva función `getExerciseUsage(exerciseId)`:
+- Query a `session_exercises` contando cuántas sesiones lo usan
+- Query a `routine_exercises` contando cuántas rutinas lo usan
+- Retorna `{ sessionCount, routineCount }`
 
-**2. `src/components/RelativeStrengthPanel.tsx**` — Nuevo componente:
+**2. `src/pages/Exercises.tsx`** — Reemplazar el botón de eliminar directo por un flujo con AlertDialog:
+- Al pulsar eliminar, llamar a `getExerciseUsage`
+- Si no tiene uso → AlertDialog simple: "¿Eliminar ejercicio?"
+- Si tiene uso → AlertDialog detallado con:
+  - Info: "Este ejercicio se usa en X sesiones y Y rutinas"
+  - Opción 1: **"Eliminar todo"** — Borra el ejercicio y en cascada los datos relacionados
+  - Opción 2: **"Cancelar"**
+  - Advertencia: "Se perderán los datos históricos de este ejercicio en análisis y sesiones"
 
-- Selector de ejercicio (solo `weight_reps`)
-- `useMemo` para recalcular el ratio al cambiar de ejercicio (instantáneo)
-- Gráfico de líneas: eje Y = ratio, eje X = fechas
-- Tarjeta "Top Ratio Histórico" (ej: "En Press Banca mueves 1.8× tu peso corporal")
-- Interpretación IA: texto condicional basado en tendencia del ratio vs peso corporal:
-  - Ratio sube + peso baja/estable → mensaje positivo
-  - Ratio baja → mensaje de alerta
-
-**3. `src/pages/Analysis.tsx**` — Añadir nueva pestaña "F.Relativa" en el TabsList (grid pasa a 5 columnas en la segunda fila o se ajusta)
-
-### Lógica de interpretación IA (in-component, sin llamada a edge function)
-
-```typescript
-// Comparar primer y último punto del gráfico
-const first = data[0], last = data[data.length - 1];
-const ratioTrend = last.ratio - first.ratio;
-const weightTrend = last.bodyWeight - first.bodyWeight;
-
-if (ratioTrend > 0 && weightTrend <= 0) → "¡Eficiencia brutal!..."
-if (ratioTrend < 0) → "Ojo, tu peso está subiendo..."
-```
-
-4. quita la pestaña racha del análisis ya que la tenemos en el inicio.
-
-&nbsp;
+**3. Base de datos** — Migración para añadir `ON DELETE CASCADE` en las foreign keys de `session_exercises.exercise_id` y `routine_exercises.exercise_id` (si no lo tienen ya), para que al borrar el ejercicio se limpien las referencias automáticamente.
 
 ### Archivos afectados
 
+| Archivo | Acción |
+|---|---|
+| `src/lib/api.ts` | Nueva función `getExerciseUsage` |
+| `src/pages/Exercises.tsx` | AlertDialog con advertencia antes de eliminar |
+| Migración SQL | Asegurar CASCADE en foreign keys |
 
-| Archivo                                    | Acción                                     |
-| ------------------------------------------ | ------------------------------------------ |
-| `src/db/calculations.ts`                   | Nueva función `getRelativeStrengthHistory` |
-| `src/components/RelativeStrengthPanel.tsx` | Nuevo componente completo                  |
-| `src/pages/Analysis.tsx`                   | Añadir pestaña + import                    |
