@@ -16,24 +16,24 @@ interface CreateExerciseDialogProps {
   onCreated?: (exercise: { id: string; name: string }) => void;
 }
 
-type ExForm = { name: string; tracking_type: TrackingType; primary_muscle_ids: number[]; secondary_muscle_ids: number[] };
+type ExForm = { name: string; tracking_type: TrackingType; primary_muscle_ids: number[]; secondary_muscle_ids: number[]; video_url: string };
 
 export default function CreateExerciseDialog({ open, onOpenChange, onCreated }: CreateExerciseDialogProps) {
   const queryClient = useQueryClient();
   const { data: muscles } = useQuery({ queryKey: ['muscles'], queryFn: getMuscles });
-  const [form, setForm] = useState<ExForm>({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] });
+  const [form, setForm] = useState<ExForm>({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [], video_url: '' });
 
   const mutation = useMutation({
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error('Nombre requerido');
       if (form.primary_muscle_ids.length === 0) throw new Error('Al menos un músculo primario requerido');
-      return await createExercise(form);
+      return await createExercise({ ...form, video_url: form.video_url.trim() || null } as any);
     },
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['exercises'] });
       queryClient.invalidateQueries({ queryKey: ['allExercises'] });
       toast.success('Ejercicio creado');
-      setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] });
+      setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [], video_url: '' });
       onOpenChange(false);
       onCreated?.({ id: data.id, name: data.name });
     },
@@ -65,6 +65,10 @@ export default function CreateExerciseDialog({ open, onOpenChange, onCreated }: 
           <div>
             <Label className="text-xs font-semibold text-muted-foreground">Músculos secundarios</Label>
             <MuscleSelect muscles={muscles} value={form.secondary_muscle_ids} onChange={v => setForm(f => ({ ...f, secondary_muscle_ids: v }))} />
+          </div>
+          <div>
+            <Label className="text-xs font-semibold text-muted-foreground">URL de video (opcional)</Label>
+            <Input value={form.video_url} onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))} placeholder="https://youtube.com/watch?v=..." className="rounded-lg bg-secondary/50 border-border" />
           </div>
           <Button className="w-full rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => mutation.mutate()} disabled={mutation.isPending}>
             {mutation.isPending ? 'Creando...' : 'Crear ejercicio'}

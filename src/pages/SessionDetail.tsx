@@ -25,7 +25,7 @@ import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggesti
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2 } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2, Video } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { SessionExportCard } from '@/components/SessionExportCard';
 import { cn } from '@/lib/utils';
@@ -440,6 +440,11 @@ export default function SessionDetail() {
                 </div>
                 <AccordionTrigger className="py-2.5 text-sm font-bold flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
                 <div className="flex items-center gap-0">
+                  {ex?.video_url && (
+                    <a href={ex.video_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Ver video">
+                      <Video className="h-4 w-4 text-primary mx-1" />
+                    </a>
+                  )}
                   <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={(ex as any)?.notes ?? null} source={ex?.source ?? 'personal'} />
                   {ex?.tracking_type === 'weight_reps' && (
                     <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} onApply={(w) => handleApplyWeight(se.id, w)} />
