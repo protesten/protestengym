@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { Link } from 'react-router-dom';
-import { CalendarCheck, ChevronRight, Play } from 'lucide-react';
+import { CalendarCheck, CheckCircle2, ChevronRight, Play } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 interface TodayRoutine {
@@ -52,7 +52,18 @@ export function TodayRoutineSuggestion() {
         .eq('date', today);
       const completedIds = new Set(todaySessions?.map(s => s.routine_id).filter(Boolean));
       const pendingIds = routineIds.filter(id => !completedIds.has(id));
-      if (!pendingIds.length) return null;
+      const allCompleted = pendingIds.length === 0;
+
+      if (allCompleted) {
+        return {
+          programName: program.name,
+          routines: [],
+          currentWeek,
+          totalWeeks: program.weeks,
+          isDeload: program.deload_week === currentWeek,
+          allCompleted: true,
+        };
+      }
 
       // 4. Get routine names
       const { data: routinesData, error: rErr } = await supabase
@@ -76,12 +87,29 @@ export function TodayRoutineSuggestion() {
         currentWeek,
         totalWeeks: program.weeks,
         isDeload,
+        allCompleted: false,
       };
     },
     staleTime: 5 * 60 * 1000,
   });
 
-  if (!data || !data.routines.length) return null;
+  if (!data) return null;
+
+  if (data.allCompleted) {
+    return (
+      <div className="rounded-xl bg-card border border-border p-4">
+        <div className="flex items-center gap-3">
+          <CheckCircle2 className="h-5 w-5 text-primary shrink-0" />
+          <div>
+            <p className="text-sm font-bold">¡Todo completado! 🎉</p>
+            <p className="text-[10px] text-muted-foreground">
+              {data.programName} · Sem. {data.currentWeek}/{data.totalWeeks}
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="rounded-xl bg-card border border-border p-4 space-y-3">
