@@ -44,16 +44,26 @@ export function TodayRoutineSuggestion() {
       const routineIds = weeks.map(w => w.routine_id).filter(Boolean) as string[];
       if (!routineIds.length) return null;
 
+      // 4.5 Check which routines already have a session today
+      const today = now.toISOString().slice(0, 10);
+      const { data: todaySessions } = await supabase
+        .from('sessions')
+        .select('routine_id')
+        .eq('date', today);
+      const completedIds = new Set(todaySessions?.map(s => s.routine_id).filter(Boolean));
+      const pendingIds = routineIds.filter(id => !completedIds.has(id));
+      if (!pendingIds.length) return null;
+
       // 4. Get routine names
       const { data: routinesData, error: rErr } = await supabase
         .from('routines')
         .select('id, name')
-        .in('id', routineIds);
+        .in('id', pendingIds);
       if (rErr || !routinesData?.length) return null;
 
       // Maintain order
       const routineMap = new Map(routinesData.map(r => [r.id, r]));
-      const routines: TodayRoutine[] = routineIds
+      const routines: TodayRoutine[] = pendingIds
         .map(id => routineMap.get(id))
         .filter(Boolean)
         .map(r => ({ routineId: r!.id, routineName: r!.name }));
