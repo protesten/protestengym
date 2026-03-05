@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getMuscles, getExercises, createExercise, updateExercise, deleteExercise,
   getPredefinedExercises, createPredefinedExercise, updatePredefinedExercise, deletePredefinedExercise,
-  isAdmin, type Exercise, type PredefinedExercise,
+  isAdmin, getExerciseUsage, type Exercise, type PredefinedExercise,
 } from '@/lib/api';
 import { TRACKING_LABELS, type TrackingType } from '@/lib/constants';
 import { Button } from '@/components/ui/button';
@@ -12,8 +12,9 @@ import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, AlertDialogDescription, AlertDialogFooter, AlertDialogCancel, AlertDialogAction } from '@/components/ui/alert-dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Pencil, Trash2, Search, Video } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Video, AlertTriangle } from 'lucide-react';
 import { toast } from 'sonner';
 import MuscleSelect from '@/components/MuscleSelect';
 import CreateExerciseDialog from '@/components/CreateExerciseDialog';
@@ -34,6 +35,12 @@ export default function Exercises() {
   const [editingPredefined, setEditingPredefined] = useState<PredefinedExercise | null>(null);
   const [isPredefinedMode, setIsPredefinedMode] = useState(false);
   const [form, setForm] = useState<ExForm>({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [], video_url: '' });
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; name: string; isPredefined: boolean } | null>(null);
+  const [deleteUsage, setDeleteUsage] = useState<{ sessionCount: number; routineCount: number } | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [loadingUsage, setLoadingUsage] = useState(false);
 
   const filteredPersonal = exercises?.filter(e => e.name.toLowerCase().includes(search.toLowerCase())) ?? [];
   const filteredPredefined = predefined?.filter(e => e.name.toLowerCase().includes(search.toLowerCase())) ?? [];
@@ -63,14 +70,42 @@ export default function Exercises() {
     onError: (e) => toast.error(e.message),
   });
 
-  const removePersonalMutation = useMutation({ mutationFn: deleteExercise, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['exercises'] }); toast.success('Ejercicio eliminado'); } });
-  const removePredefinedMutation = useMutation({ mutationFn: deletePredefinedExercise, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['predefined_exercises'] }); toast.success('Ejercicio predefinido eliminado'); } });
+  const removePersonalMutation = useMutation({
+    mutationFn: deleteExercise,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['exercises'] }); toast.success('Ejercicio eliminado'); setDeleteDialogOpen(false); },
+  });
+  const removePredefinedMutation = useMutation({
+    mutationFn: deletePredefinedExercise,
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['predefined_exercises'] }); toast.success('Ejercicio predefinido eliminado'); setDeleteDialogOpen(false); },
+  });
+
+  async function handleDeleteClick(id: string, name: string, isPredefined: boolean) {
+    setDeleteTarget({ id, name, isPredefined });
+    setLoadingUsage(true);
+    setDeleteDialogOpen(true);
+    try {
+      const usage = await getExerciseUsage(id);
+      setDeleteUsage(usage);
+    } catch {
+      setDeleteUsage({ sessionCount: 0, routineCount: 0 });
+    } finally {
+      setLoadingUsage(false);
+    }
+  }
+
+  function confirmDelete() {
+    if (!deleteTarget) return;
+    if (deleteTarget.isPredefined) removePredefinedMutation.mutate(deleteTarget.id);
+    else removePersonalMutation.mutate(deleteTarget.id);
+  }
 
   function openCreatePersonal() { setCreatePersonalOpen(true); }
   function openCreatePredefined() { setEditingPersonal(null); setEditingPredefined(null); setIsPredefinedMode(true); setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [], video_url: '' }); setDialogOpen(true); }
   function openEditPersonal(ex: Exercise) { setEditingPersonal(ex); setEditingPredefined(null); setIsPredefinedMode(false); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [], video_url: (ex as any).video_url ?? '' }); setDialogOpen(true); }
   function openEditPredefined(ex: PredefinedExercise) { setEditingPredefined(ex); setEditingPersonal(null); setIsPredefinedMode(true); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [], video_url: (ex as any).video_url ?? '' }); setDialogOpen(true); }
   function handleSave() { if (isPredefinedMode) savePredefinedMutation.mutate(); else savePersonalMutation.mutate(); }
+
+  const hasUsage = deleteUsage && (deleteUsage.sessionCount > 0 || deleteUsage.routineCount > 0);
 
   function renderExerciseRow(ex: { id: string; name: string; tracking_type: string; primary_muscle_ids: number[] | null; secondary_muscle_ids: number[] | null; video_url?: string | null }, isPred: boolean) {
     return (
@@ -93,12 +128,12 @@ export default function Exercises() {
         {isPred && admin ? (
           <div className="flex gap-1 shrink-0">
             <Button variant="ghost" size="icon" onClick={() => openEditPredefined(ex as PredefinedExercise)}><Pencil className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onClick={() => removePredefinedMutation.mutate(ex.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(ex.id, ex.name, true)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
           </div>
         ) : !isPred ? (
           <div className="flex gap-1 shrink-0">
             <Button variant="ghost" size="icon" onClick={() => openEditPersonal(ex as Exercise)}><Pencil className="h-4 w-4" /></Button>
-            <Button variant="ghost" size="icon" onClick={() => removePersonalMutation.mutate(ex.id)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
+            <Button variant="ghost" size="icon" onClick={() => handleDeleteClick(ex.id, ex.name, false)}><Trash2 className="h-4 w-4 text-destructive" /></Button>
           </div>
         ) : null}
       </div>
@@ -164,6 +199,46 @@ export default function Exercises() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Delete confirmation AlertDialog */}
+      <AlertDialog open={deleteDialogOpen} onOpenChange={(open) => { setDeleteDialogOpen(open); if (!open) { setDeleteTarget(null); setDeleteUsage(null); } }}>
+        <AlertDialogContent className="max-w-sm bg-card border-border rounded-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="flex items-center gap-2 font-bold">
+              {hasUsage && <AlertTriangle className="h-5 w-5 text-destructive" />}
+              Eliminar "{deleteTarget?.name}"
+            </AlertDialogTitle>
+            <AlertDialogDescription className="text-sm text-muted-foreground">
+              {loadingUsage ? (
+                'Comprobando uso del ejercicio...'
+              ) : hasUsage ? (
+                <div className="space-y-2">
+                  <p className="font-medium text-foreground">
+                    Este ejercicio se usa en {deleteUsage!.sessionCount > 0 ? `${deleteUsage!.sessionCount} sesión(es)` : ''}
+                    {deleteUsage!.sessionCount > 0 && deleteUsage!.routineCount > 0 ? ' y ' : ''}
+                    {deleteUsage!.routineCount > 0 ? `${deleteUsage!.routineCount} rutina(s)` : ''}.
+                  </p>
+                  <p className="text-destructive">
+                    ⚠️ Se perderán los datos históricos de este ejercicio en análisis, sesiones y rutinas. Esta acción no se puede deshacer.
+                  </p>
+                </div>
+              ) : (
+                'Este ejercicio no se usa en ninguna sesión ni rutina. ¿Deseas eliminarlo?'
+              )}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="rounded-lg">Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              disabled={loadingUsage}
+              className="rounded-lg bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {hasUsage ? 'Eliminar todo' : 'Eliminar'}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <CreateExerciseDialog open={createPersonalOpen} onOpenChange={setCreatePersonalOpen} />
     </div>
