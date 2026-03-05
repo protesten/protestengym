@@ -13,12 +13,13 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Plus, Pencil, Trash2, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, Search, Video } from 'lucide-react';
 import { toast } from 'sonner';
 import MuscleSelect from '@/components/MuscleSelect';
 import CreateExerciseDialog from '@/components/CreateExerciseDialog';
+import VideoPreview from '@/components/VideoPreview';
 
-type ExForm = { name: string; tracking_type: TrackingType; primary_muscle_ids: number[]; secondary_muscle_ids: number[] };
+type ExForm = { name: string; tracking_type: TrackingType; primary_muscle_ids: number[]; secondary_muscle_ids: number[]; video_url: string };
 
 export default function Exercises() {
   const queryClient = useQueryClient();
@@ -32,7 +33,7 @@ export default function Exercises() {
   const [editingPersonal, setEditingPersonal] = useState<Exercise | null>(null);
   const [editingPredefined, setEditingPredefined] = useState<PredefinedExercise | null>(null);
   const [isPredefinedMode, setIsPredefinedMode] = useState(false);
-  const [form, setForm] = useState<ExForm>({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] });
+  const [form, setForm] = useState<ExForm>({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [], video_url: '' });
 
   const filteredPersonal = exercises?.filter(e => e.name.toLowerCase().includes(search.toLowerCase())) ?? [];
   const filteredPredefined = predefined?.filter(e => e.name.toLowerCase().includes(search.toLowerCase())) ?? [];
@@ -44,8 +45,8 @@ export default function Exercises() {
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error('Nombre requerido');
       if (form.primary_muscle_ids.length === 0) throw new Error('Al menos un músculo primario requerido');
-      if (editingPersonal) await updateExercise(editingPersonal.id, form);
-      else await createExercise(form);
+      if (editingPersonal) await updateExercise(editingPersonal.id, { ...form, video_url: form.video_url.trim() || null } as any);
+      else await createExercise({ ...form, video_url: form.video_url.trim() || null } as any);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['exercises'] }); toast.success(editingPersonal ? 'Ejercicio actualizado' : 'Ejercicio creado'); setDialogOpen(false); },
     onError: (e) => toast.error(e.message),
@@ -55,8 +56,8 @@ export default function Exercises() {
     mutationFn: async () => {
       if (!form.name.trim()) throw new Error('Nombre requerido');
       if (form.primary_muscle_ids.length === 0) throw new Error('Al menos un músculo primario requerido');
-      if (editingPredefined) await updatePredefinedExercise(editingPredefined.id, form);
-      else await createPredefinedExercise(form);
+      if (editingPredefined) await updatePredefinedExercise(editingPredefined.id, { ...form, video_url: form.video_url.trim() || null } as any);
+      else await createPredefinedExercise({ ...form, video_url: form.video_url.trim() || null } as any);
     },
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['predefined_exercises'] }); toast.success(editingPredefined ? 'Ejercicio actualizado' : 'Ejercicio predefinido creado'); setDialogOpen(false); },
     onError: (e) => toast.error(e.message),
@@ -66,17 +67,22 @@ export default function Exercises() {
   const removePredefinedMutation = useMutation({ mutationFn: deletePredefinedExercise, onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['predefined_exercises'] }); toast.success('Ejercicio predefinido eliminado'); } });
 
   function openCreatePersonal() { setCreatePersonalOpen(true); }
-  function openCreatePredefined() { setEditingPersonal(null); setEditingPredefined(null); setIsPredefinedMode(true); setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [] }); setDialogOpen(true); }
-  function openEditPersonal(ex: Exercise) { setEditingPersonal(ex); setEditingPredefined(null); setIsPredefinedMode(false); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [] }); setDialogOpen(true); }
-  function openEditPredefined(ex: PredefinedExercise) { setEditingPredefined(ex); setEditingPersonal(null); setIsPredefinedMode(true); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [] }); setDialogOpen(true); }
+  function openCreatePredefined() { setEditingPersonal(null); setEditingPredefined(null); setIsPredefinedMode(true); setForm({ name: '', tracking_type: 'weight_reps', primary_muscle_ids: [], secondary_muscle_ids: [], video_url: '' }); setDialogOpen(true); }
+  function openEditPersonal(ex: Exercise) { setEditingPersonal(ex); setEditingPredefined(null); setIsPredefinedMode(false); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [], video_url: (ex as any).video_url ?? '' }); setDialogOpen(true); }
+  function openEditPredefined(ex: PredefinedExercise) { setEditingPredefined(ex); setEditingPersonal(null); setIsPredefinedMode(true); setForm({ name: ex.name, tracking_type: ex.tracking_type, primary_muscle_ids: ex.primary_muscle_ids ?? [], secondary_muscle_ids: ex.secondary_muscle_ids ?? [], video_url: (ex as any).video_url ?? '' }); setDialogOpen(true); }
   function handleSave() { if (isPredefinedMode) savePredefinedMutation.mutate(); else savePersonalMutation.mutate(); }
 
-  function renderExerciseRow(ex: { id: string; name: string; tracking_type: string; primary_muscle_ids: number[] | null; secondary_muscle_ids: number[] | null }, isPred: boolean) {
+  function renderExerciseRow(ex: { id: string; name: string; tracking_type: string; primary_muscle_ids: number[] | null; secondary_muscle_ids: number[] | null; video_url?: string | null }, isPred: boolean) {
     return (
       <div key={ex.id} className="flex items-center justify-between p-3 rounded-xl bg-card border border-border hover:border-primary/20 transition-colors">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <p className="font-semibold text-sm">{ex.name}</p>
+            {ex.video_url && (
+              <a href={ex.video_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Ver video">
+                <Video className="h-4 w-4 text-primary" />
+              </a>
+            )}
             {isPred && <Badge className="text-[10px] px-1.5 py-0 bg-secondary text-secondary-foreground border-0">Predefinido</Badge>}
           </div>
           <p className="text-xs text-muted-foreground truncate mt-0.5">
@@ -149,6 +155,11 @@ export default function Exercises() {
             </div>
             <div><Label className="text-xs font-semibold text-muted-foreground">Músculos primarios</Label><MuscleSelect muscles={muscles} value={form.primary_muscle_ids} onChange={v => setForm(f => ({ ...f, primary_muscle_ids: v }))} /></div>
             <div><Label className="text-xs font-semibold text-muted-foreground">Músculos secundarios</Label><MuscleSelect muscles={muscles} value={form.secondary_muscle_ids} onChange={v => setForm(f => ({ ...f, secondary_muscle_ids: v }))} /></div>
+            <div>
+              <Label className="text-xs font-semibold text-muted-foreground">URL de video (opcional)</Label>
+              <Input value={form.video_url} onChange={e => setForm(f => ({ ...f, video_url: e.target.value }))} placeholder="https://youtube.com/watch?v=..." className="rounded-lg bg-secondary/50 border-border" />
+            </div>
+            {form.video_url.trim() && <VideoPreview url={form.video_url.trim()} />}
             <Button className="w-full rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={handleSave}>Guardar</Button>
           </div>
         </DialogContent>

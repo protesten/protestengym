@@ -18,6 +18,7 @@ export type AnyExercise = {
   tracking_type: string;
   primary_muscle_ids: number[] | null;
   secondary_muscle_ids: number[] | null;
+  video_url?: string | null;
   source: 'predefined' | 'personal';
 };
 
@@ -91,8 +92,8 @@ export async function deletePredefinedExercise(id: string) {
 export async function getAllExercises(): Promise<AnyExercise[]> {
   const [personal, predefined] = await Promise.all([getExercises(), getPredefinedExercises()]);
   const result: AnyExercise[] = [
-    ...(predefined ?? []).map(e => ({ id: e.id, name: e.name, tracking_type: e.tracking_type, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids, source: 'predefined' as const })),
-    ...(personal ?? []).map(e => ({ id: e.id, name: e.name, tracking_type: e.tracking_type, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids, source: 'personal' as const })),
+    ...(predefined ?? []).map(e => ({ id: e.id, name: e.name, tracking_type: e.tracking_type, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids, video_url: (e as any).video_url ?? null, source: 'predefined' as const })),
+    ...(personal ?? []).map(e => ({ id: e.id, name: e.name, tracking_type: e.tracking_type, primary_muscle_ids: e.primary_muscle_ids, secondary_muscle_ids: e.secondary_muscle_ids, video_url: (e as any).video_url ?? null, source: 'personal' as const })),
   ];
   return result;
 }
