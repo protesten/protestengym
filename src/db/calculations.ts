@@ -481,6 +481,112 @@ export function formatSetSummary(sets: WorkoutSet[], trackingType: TrackingType)
   }
 }
 
+// ============ Relative Strength History ============
+
+export interface RelativeStrengthPoint {
+  date: string;
+  ratio: number;
+  estimated1RM: number;
+  bodyWeight: number;
+}
+
+export interface RelativeStrengthResult {
+  history: RelativeStrengthPoint[];
+  topRatio: { ratio: number; date: string; estimated1RM: number; bodyWeight: number } | null;
+}
+
+/** Epley 1RM estimation */
+function estimate1RM(weight: number, reps: number): number {
+  if (reps <= 0 || weight <= 0) return 0;
+  if (reps === 1) return weight;
+  return weight * (1 + reps / 30);
+}
+
+/**
+ * Fetch all data needed for relative strength in bulk, then compute per-exercise in memory.
+ * Returns a map: exerciseId → RelativeStrengthPoint[]
+ */
+export async function prefetchRelativeStrengthData(range?: DateRange): Promise<{
+  exercises: CalcExercise[];
+  prefetched: PrefetchedData;
+  bodyWeights: { date: string; weight_kg: number }[];
+}> {
+  const dateTo = range?.to ?? format(new Date(), 'yyyy-MM-dd');
+  const dateFrom = range?.from ?? format(subMonths(new Date(), 24), 'yyyy-MM-dd');
+
+  const [exercises, prefetched, { data: measurements }] = await Promise.all([
+    getAllExercisesForCalc(),
+    prefetchSessionData(dateFrom, dateTo),
+    supabase.from('body_measurements').select('date, weight_kg')
+      .not('weight_kg', 'is', null)
+      .order('date', { ascending: true }),
+  ]);
+
+  const bodyWeights = (measurements ?? [])
+    .filter(m => m.weight_kg != null)
+    .map(m => ({ date: m.date, weight_kg: Number(m.weight_kg) }));
+
+  return { exercises, prefetched, bodyWeights };
+}
+
+/** Compute relative strength history for a single exercise from pre-fetched data */
+export function computeRelativeStrengthForExercise(
+  exerciseId: string,
+  prefetched: PrefetchedData,
+  bodyWeights: { date: string; weight_kg: number }[],
+): RelativeStrengthResult {
+  if (!bodyWeights.length) return { history: [], topRatio: null };
+
+  const seList = prefetched.seByExerciseId.get(exerciseId) ?? [];
+  if (!seList.length) return { history: [], topRatio: null };
+
+  // Group session_exercises by session, compute best 1RM per session date
+  const sessionBest1RM = new Map<string, { date: string; best1RM: number }>();
+  for (const se of seList) {
+    const session = prefetched.sessionById.get(se.session_id);
+    if (!session) continue;
+    const sets = (prefetched.setsBySeId.get(se.id) ?? []).filter(s => s.set_type === 'work');
+    for (const s of sets) {
+      const est = estimate1RM(s.weight ?? 0, s.reps ?? 0);
+      if (est <= 0) continue;
+      const existing = sessionBest1RM.get(session.id);
+      if (!existing || est > existing.best1RM) {
+        sessionBest1RM.set(session.id, { date: session.date, best1RM: est });
+      }
+    }
+  }
+
+  if (!sessionBest1RM.size) return { history: [], topRatio: null };
+
+  // Find closest body weight for each session date
+  function closestWeight(targetDate: string): number {
+    let best = bodyWeights[0];
+    let bestDiff = Math.abs(new Date(targetDate).getTime() - new Date(best.date).getTime());
+    for (const bw of bodyWeights) {
+      const diff = Math.abs(new Date(targetDate).getTime() - new Date(bw.date).getTime());
+      if (diff < bestDiff) { best = bw; bestDiff = diff; }
+    }
+    return best.weight_kg;
+  }
+
+  const history: RelativeStrengthPoint[] = [];
+  let topRatio: RelativeStrengthResult['topRatio'] = null;
+
+  for (const [, { date, best1RM }] of sessionBest1RM) {
+    const bw = closestWeight(date);
+    if (bw <= 0) continue;
+    const ratio = Math.round((best1RM / bw) * 100) / 100;
+    history.push({ date, ratio, estimated1RM: Math.round(best1RM * 10) / 10, bodyWeight: bw });
+    if (!topRatio || ratio > topRatio.ratio) {
+      topRatio = { ratio, date, estimated1RM: Math.round(best1RM * 10) / 10, bodyWeight: bw };
+    }
+  }
+
+  history.sort((a, b) => a.date.localeCompare(b.date));
+
+  return { history, topRatio };
+}
+
 // ============ Personal Records (optimized) ============
 
 export interface PersonalRecord {
