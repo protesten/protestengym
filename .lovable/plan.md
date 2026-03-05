@@ -1,65 +1,55 @@
 
 
-## Rediseño visual de la vista de sesión de entrenamiento
+## Mejoras en sesiones: hora, estado completado y filtrado
 
-Basándome en la imagen de referencia, el objetivo es reducir ruido visual y mejorar la jerarquía de información.
+### Problema
+1. Las sesiones recientes solo muestran la fecha, pero se crean varias al día y no se distinguen.
+2. No hay forma de marcar una sesión como completada. Todas las sesiones se usan en cálculos y análisis sin distinción.
 
-### Cambios principales
+### Solución
 
-| Cambio | Descripción |
-|---|---|
-| **Barra de progreso** | Añadir barra horizontal en la parte superior que muestra el progreso (ejercicios con series registradas / total ejercicios) |
-| **Header simplificado** | Fecha a la izquierda, solo iconos de compartir y eliminar sesión a la derecha. Mover CSV/duplicar/descargar al menú de compartir o eliminarlos del header |
-| **Notas como input inline** | Cambiar el botón de notas por un `Input` placeholder "Notas..." siempre visible, más limpio |
-| **Ejercicio activo destacado** | El ejercicio expandido muestra un card con borde más prominente. Encabezados de sección: "OBJETIVO DE SESIÓN" y "REGISTRO DE SERIES" como labels uppercase pequeñas |
-| **Ejercicios colapsados compactos** | Los ejercicios no expandidos muestran: nombre + badge de objetivo (peso×reps) en una línea, sin acordeón pesado |
-| **Sección "SIGUIENTES EJERCICIOS"** | Los ejercicios sin series registradas aparecen listados al final en una sección separada con iconos de acción inline (copiar, completar, info) |
-| **Botón "+ Serie" más prominente** | Estilo filled con gradiente primario en vez de outline dashed |
+#### 1. Migración de base de datos
+Añadir columna `is_completed` (boolean, default `false`) a la tabla `sessions`:
 
-### Archivo afectado
-
-| Archivo | Acción |
-|---|---|
-| `src/pages/SessionDetail.tsx` | Reestructurar el render: header, progreso, ejercicio activo, colapsados, siguientes |
-
-### Estructura visual resultante
-
-```text
-┌─────────────────────────────────┐
-│ ████████████████░░░░  (progreso)│
-│ 2026-03-05 📅        🔗  🗑    │
-│ [Notas...                     ] │
-├─────────────────────────────────┤
-│ ┌─ Ejercicio Activo ──────────┐ │
-│ │ Hip Thrust...    🎥 📋 ⚙ ⋮ │ │
-│ │ Prev: 85kg×12, 11           │ │
-│ │                             │ │
-│ │ OBJETIVO DE SESIÓN          │ │
-│ │ Hipertrofia: 91.5kg (8-12)  │ │
-│ │                             │ │
-│ │ REGISTRO DE SERIES          │ │
-│ │ [T] 91.5 kg  10 reps  Máx  │ │
-│ │ [T] 91.5 kg  10 reps  Máx  │ │
-│ │ [══ + Serie ══════════════] │ │
-│ └─────────────────────────────┘ │
-│                                 │
-│ ▿ Sentadilla hack...           │
-│   🔥 51kg · 8-12r              │
-│                                 │
-│ ▿ Prensa inclinada...          │
-│   🔥 16.5kg · 8-12r            │
-│                                 │
-│ SIGUIENTES EJERCICIOS           │
-│ 2. Curl femoral...    📋 ✅ ℹ  │
-│ 3. Sentadilla hack... 📋 ⚠ ℹ  │
-└─────────────────────────────────┘
+```sql
+ALTER TABLE public.sessions ADD COLUMN is_completed boolean NOT NULL DEFAULT false;
 ```
 
-### Detalles de implementación
+No se necesita nueva policy RLS (las existentes ya cubren CRUD por `user_id`).
 
-- **Barra de progreso**: calcular `completedCount` (ejercicios con ≥1 serie con datos) vs `total` y renderizar un `<Progress>` de radix
-- **Ejercicios divididos en 3 grupos**: activo (expandido, el primero sin completar o el que el usuario toque), colapsados (con series), y "siguientes" (sin series aún)
-- **Header**: reducir a 2 iconos (share, delete). El resto se agrupa en un dropdown o se quita
-- **Notas**: `Input` directo con `onBlur` para guardar, sin estado de edición separado
-- Se mantiene toda la lógica existente de sets, mutations, PR detection, offline queue
+#### 2. Mostrar hora en sesiones recientes (`src/pages/Index.tsx`)
+- En la lista de sesiones recientes, mostrar `created_at` formateado como hora (`HH:mm`) junto a la fecha.
+- Ejemplo: "2026-03-05 · 11:20" en lugar de solo "2026-03-05".
+- Añadir badge visual de estado: "Pendiente" (amarillo) o "Completada" (verde).
+
+#### 3. Botón "Finalizar sesión" en `src/pages/SessionDetail.tsx`
+- Añadir un botón prominente al final de la sesión (o en el header) que marque `is_completed = true` con `updateSession(id, { is_completed: true })`.
+- El botón del "Completar → siguiente ejercicio" del último ejercicio podría automáticamente marcar la sesión como completada.
+- Si la sesión ya está completada, mostrar un badge "Completada" y ocultar o desactivar el botón.
+
+#### 4. Filtrar sesiones no completadas en cálculos (`src/db/calculations.ts`)
+- En las funciones de análisis que consultan sesiones, filtrar por `is_completed = true` para que solo las sesiones finalizadas cuenten en:
+  - Volumen semanal
+  - PRs
+  - Historial de peso
+  - Resumen de sesiones
+
+#### 5. Filtrar en funciones de API (`src/lib/api.ts`)
+- `getPreviousSetsForExercise`: filtrar sesiones completadas al buscar referencia anterior.
+- `getWeightHistoryForExercise` y `getBest1RMForExercise`: filtrar por completadas.
+
+#### 6. Hora en calendario (`src/pages/SessionCalendar.tsx`)
+- Mostrar la hora de creación junto al nombre de la sesión.
+
+### Archivos afectados
+
+| Archivo | Cambio |
+|---|---|
+| Migración SQL | Añadir columna `is_completed` a `sessions` |
+| `src/pages/Index.tsx` | Mostrar hora (`created_at`) y badge de estado en sesiones recientes |
+| `src/pages/SessionDetail.tsx` | Botón "Finalizar sesión" que marca `is_completed = true` |
+| `src/pages/SessionCalendar.tsx` | Mostrar hora de creación |
+| `src/db/calculations.ts` | Filtrar por `is_completed = true` en funciones de análisis |
+| `src/lib/api.ts` | Filtrar sesiones completadas en `getPreviousSetsForExercise`, `getWeightHistoryForExercise`, `getBest1RMForExercise` |
+| `src/components/TodayRoutineSuggestion.tsx` | Filtrar solo sesiones completadas al determinar rutinas del día hechas |
 
