@@ -1,80 +1,32 @@
 
 
-## Módulo "Coach IA" — Inteligencia de Entrenamiento
+## Añadir Video a Ejercicios
 
 ### Concepto
-
-Una nueva página `/coach` con un botón "Consultar al Coach" que recopila datos del usuario (historial de ejercicios, RPE, medidas antropométricas), los envía a una edge function que llama al Lovable AI Gateway (GPT), y muestra un análisis personalizado en cards con colores según el estado (verde/ámbar/rojo).
-
-### Arquitectura
-
-```text
-[CoachPage] → recopila datos del cliente → POST /functions/v1/ai-coach
-                                                    ↓
-                                          [Edge Function ai-coach]
-                                                    ↓
-                                          Lovable AI Gateway (GPT)
-                                                    ↓
-                                          JSON estructurado con análisis
-                                                    ↓
-                                          [CoachPage] renderiza cards
-```
+Añadir un campo `video_url` a las tablas `exercises` y `predefined_exercises` para que cada ejercicio pueda tener un enlace a video (YouTube, etc.). Durante el entreno, mostrar un icono de video junto al nombre del ejercicio si tiene URL configurada. En la página de ejercicios, mostrar el video embebido.
 
 ### Cambios
 
-**1. Edge Function `supabase/functions/ai-coach/index.ts`**
+**1. DB Migration**: Añadir columna `video_url` (text, nullable) a `exercises` y `predefined_exercises`.
 
-- Recibe los datos preprocesados del cliente (resúmenes de 1RM por ejercicio en las últimas N sesiones, RPE promedio semanal, peso corporal y % grasa recientes, estancamientos detectados).
-- Construye un system prompt que instruye al modelo a analizar:
-  - **Estancamiento**: ejercicios con 3+ sesiones sin mejora de 1RM.
-  - **Fuerza relativa**: si peso baja pero 1RM se mantiene/sube.
-  - **Fatiga**: si RPE promedio semanal > 8.5, sugerir deload.
-- Usa tool calling para extraer respuesta estructurada: `{ achievement: string, alert: string, advice: string, status: 'progress' | 'plateau' | 'overtraining' }`.
-- Añadir al `config.toml`: `[functions.ai-coach] verify_jwt = false`.
+**2. `src/lib/api.ts`**: Actualizar `AnyExercise` para incluir `video_url`. Pasar el campo en `getAllExercises`.
 
-**2. `src/db/coach-data.ts`** (nuevo) — Funciones de recopilación de datos
+**3. Formularios de ejercicio** (`Exercises.tsx`, `CreateExerciseDialog.tsx`): Añadir campo de input para URL de video en el form `ExForm`.
 
-- `getCoachData()`: función que recopila todo lo necesario para el análisis:
-  - Por cada ejercicio `weight_reps`: 1RM de las últimas 5 sesiones (usando `calculate1RM` existente). Detecta estancamiento (3+ sesiones sin mejora).
-  - RPE promedio de la última semana.
-  - Últimas 2 mediciones de peso corporal y % grasa (de `body_measurements`).
-  - Devuelve un objeto listo para enviar al edge function.
+**4. `src/pages/SessionDetail.tsx`**: En el header de cada ejercicio, si tiene `video_url`, mostrar un icono `Video` (de lucide) que abre el enlace en nueva pestaña.
 
-**3. `src/pages/Coach.tsx`** (nuevo)
+**5. `src/pages/Exercises.tsx`**: En cada fila de ejercicio, mostrar icono de video si existe. Al abrir edición o consulta, mostrar el video embebido (iframe de YouTube o enlace directo).
 
-- Botón "Consultar al Coach" que llama a `getCoachData()` y envía a la edge function.
-- Muestra 3 cards con el resultado:
-  - **Logro de la semana** (borde verde si `status === 'progress'`).
-  - **Alerta de mejora** (borde ámbar si `status === 'plateau'`).
-  - **Consejo personalizado** (borde rojo si `status === 'overtraining'`, verde si no).
-- Estado de carga con skeleton.
-- Historial de consultas anteriores guardado en `localStorage` (no necesita DB).
-
-**4. `src/App.tsx`**: Añadir ruta `/coach`.
-
-**5. `src/components/BottomNav.tsx`**: Añadir "Coach" al menú "Más" con icono `Brain`.
-
-### Lógica de detección de estancamiento (cliente)
-
-```typescript
-// Para cada ejercicio, obtener 1RM por sesión (últimas 5)
-// Si las últimas 3 sesiones tienen 1RM <= max de las 3 anteriores → "meseta"
-```
-
-### Prompt del sistema (edge function)
-
-El prompt instruirá al modelo a responder en español, ser conciso, usar los datos proporcionados, y devolver la estructura via tool calling. Incluirá reglas específicas sobre cuándo marcar cada status.
+**6. Nuevo componente `src/components/VideoPreview.tsx`**: Componente que detecta si la URL es de YouTube (extrae el ID) y muestra un iframe embebido, o un enlace directo para otras URLs.
 
 ### Archivos afectados
 
 | Archivo | Acción |
 |---|---|
-| `supabase/functions/ai-coach/index.ts` | Nuevo: edge function con Lovable AI |
-| `supabase/config.toml` | Añadir `[functions.ai-coach]` |
-| `src/db/coach-data.ts` | Nuevo: recopilación de datos para el coach |
-| `src/pages/Coach.tsx` | Nuevo: página del coach |
-| `src/App.tsx` | Añadir ruta `/coach` |
-| `src/components/BottomNav.tsx` | Añadir enlace al coach |
-
-No se necesitan migraciones de base de datos. Se usa `LOVABLE_API_KEY` ya configurado.
+| DB migration | `video_url text` en `exercises` y `predefined_exercises` |
+| `src/lib/api.ts` | Incluir `video_url` en `AnyExercise` y funciones de create/update |
+| `src/components/CreateExerciseDialog.tsx` | Campo video_url en el form |
+| `src/pages/Exercises.tsx` | Campo video_url en form + icono en filas + preview |
+| `src/components/VideoPreview.tsx` | Nuevo: embeber YouTube o mostrar enlace |
+| `src/pages/SessionDetail.tsx` | Icono de video junto al nombre del ejercicio |
 
