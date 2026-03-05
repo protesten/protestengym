@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Calculator, Target } from 'lucide-react';
+import { Target } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { getBest1RMForExercise, getLatestBodyWeight } from '@/lib/api';
@@ -16,6 +16,17 @@ interface Props {
 function isBodyweightExercise(name: string): boolean {
   const lower = name.toLowerCase();
   return BODYWEIGHT_EXERCISE_PATTERNS.some(p => lower.includes(p));
+}
+
+/** Safe 1RM-based target computation */
+function computeTargetWeight(oneRM: number | null, goal: TrainingGoal, isBW: boolean, bodyWeight: number | null): number | null {
+  if (!oneRM || oneRM <= 0 || !Number.isFinite(oneRM)) return null;
+  const pct = TRAINING_GOALS[goal].pct;
+  let target = Math.round(oneRM * pct * 2) / 2;
+  if (isBW && bodyWeight && bodyWeight > 0) {
+    target = Math.max(0, target - bodyWeight);
+  }
+  return Number.isFinite(target) ? target : null;
 }
 
 export function WeightSuggestion({ exerciseId, exerciseName, trainingGoal, onApply }: Props) {
@@ -36,19 +47,8 @@ export function WeightSuggestion({ exerciseId, exerciseName, trainingGoal, onApp
   });
 
   const oneRM = best1RM?.oneRM ?? null;
-
-  const computeTarget = (goal: TrainingGoal): number | null => {
-    if (!oneRM) return null;
-    const pct = TRAINING_GOALS[goal].pct;
-    let target = Math.round(oneRM * pct * 2) / 2; // round to 0.5kg
-    if (isBW && bodyWeight) {
-      target = Math.max(0, target - bodyWeight);
-    }
-    return target;
-  };
-
   const activeGoal = trainingGoal ?? 'hypertrophy';
-  const targetWeight = computeTarget(activeGoal);
+  const targetWeight = computeTargetWeight(oneRM, activeGoal, isBW, bodyWeight ?? null);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -60,7 +60,7 @@ export function WeightSuggestion({ exerciseId, exerciseName, trainingGoal, onApp
       <PopoverContent className="w-64 p-3 bg-card border-border rounded-xl" align="end" side="bottom">
         <p className="text-xs font-bold mb-2 truncate">{exerciseName}</p>
         
-        {oneRM != null ? (
+        {oneRM != null && oneRM > 0 ? (
           <div className="space-y-2.5">
             <div className="flex items-center justify-between text-xs">
               <span className="text-muted-foreground">1RM estimado</span>
@@ -76,7 +76,7 @@ export function WeightSuggestion({ exerciseId, exerciseName, trainingGoal, onApp
 
             <div className="border-t border-border pt-2 space-y-1.5">
               {(Object.entries(TRAINING_GOALS) as [TrainingGoal, typeof TRAINING_GOALS[TrainingGoal]][]).map(([key, goal]) => {
-                const tw = computeTarget(key);
+                const tw = computeTargetWeight(oneRM, key, isBW, bodyWeight ?? null);
                 const isActive = key === activeGoal;
                 return (
                   <div
@@ -115,7 +115,7 @@ export function WeightSuggestion({ exerciseId, exerciseName, trainingGoal, onApp
   );
 }
 
-// Inline target weight badge shown in exercise header
+// Inline target weight badge + proactive recommendation
 export function TargetWeightBadge({ exerciseId, exerciseName, trainingGoal }: { exerciseId: string; exerciseName: string; trainingGoal: TrainingGoal | null }) {
   const { data: best1RM } = useQuery({
     queryKey: ['best_1rm', exerciseId],
@@ -130,16 +130,22 @@ export function TargetWeightBadge({ exerciseId, exerciseName, trainingGoal }: { 
   });
 
   const oneRM = best1RM?.oneRM ?? null;
-  if (!oneRM) return null;
+  if (!oneRM || oneRM <= 0) return null;
 
   const goal = trainingGoal ?? 'hypertrophy';
   const goalInfo = TRAINING_GOALS[goal];
-  let target = Math.round(oneRM * goalInfo.pct * 2) / 2;
-  if (isBW && bodyWeight) target = Math.max(0, target - bodyWeight);
+  const target = computeTargetWeight(oneRM, goal, isBW, bodyWeight ?? null);
+
+  if (target == null) return null;
 
   return (
-    <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md">
-      {goalInfo.emoji} {target}kg · {goalInfo.reps}r
-    </span>
+    <div className="flex flex-col gap-0.5">
+      <span className="inline-flex items-center gap-1 text-[10px] font-bold text-primary bg-primary/10 px-1.5 py-0.5 rounded-md w-fit">
+        {goalInfo.emoji} {target}kg · {goalInfo.reps}r
+      </span>
+      <span className="text-[9px] text-muted-foreground pl-0.5">
+        Objetivo {goalInfo.label}: {target}kg {isBW ? '(lastre)' : ''} · {goalInfo.reps} reps
+      </span>
+    </div>
   );
 }

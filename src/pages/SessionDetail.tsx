@@ -22,7 +22,7 @@ import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
 import { RestTimer } from '@/components/RestTimer';
 import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggestion';
-import { RPEFeedback } from '@/components/RPEFeedback';
+import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2 } from 'lucide-react';
@@ -134,12 +134,15 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
         </>
       )}
 
-      <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
-        <SelectTrigger className="w-16 h-8 text-xs rounded-md bg-card border-border">
-          <SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} />
-        </SelectTrigger>
-        <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>@{r}</SelectItem>)}</SelectContent>
-      </Select>
+      <div className="flex items-center gap-1">
+        <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null } as any)}>
+          <SelectTrigger className="w-16 h-8 text-xs rounded-md bg-card border-border">
+            <SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} />
+          </SelectTrigger>
+          <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>@{r}</SelectItem>)}</SelectContent>
+        </Select>
+        <RPEBadge rpe={rpeValue} />
+      </div>
 
       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 ml-auto" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive/70" /></Button>
     </div>
