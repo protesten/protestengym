@@ -1,48 +1,52 @@
+## Evolución de Fuerza Relativa — Nueva sección en Análisis
 
+### Concepto
 
-## Problema: Análisis de Músculos extremadamente lento
+Nueva pestaña "F. Relativa" en la página de Análisis que muestra el ratio 1RM/Peso Corporal a lo largo del tiempo, con filtro por ejercicio, tarjeta de "Top Ratio Histórico" e interpretación del Coach IA.
 
-### Causa raíz
+### Cambios
 
-La función `getMuscleComparisons` en `src/db/calculations.ts` (línea 140) itera sobre **cada músculo × cada ejercicio** y llama a `exerciseMetricInRange` para cada combinación. Esa función a su vez hace **3 queries secuenciales** a la base de datos (sessions → session_exercises → sets). Con ~50 músculos y ~30 ejercicios, esto genera **miles de queries secuenciales** a la DB.
+**1. `src/db/calculations.ts**` — Nueva función `getRelativeStrengthHistory`:
 
-El mismo patrón afecta a `getPersonalRecords`, `getAll1RMs`, `get1RMHistory` y `getPeriodSummaries` — todas hacen queries individuales dentro de bucles `for`.
+- Recibe `exerciseId` y `DateRange` opcional
+- Reutiliza `prefetchSessionData` + query a `body_measurements` (último `weight_kg` por fecha)
+- Para cada sesión del ejercicio, calcula `best1RM / bodyWeight` del día más cercano
+- Retorna `{ date, ratio, estimated1RM, bodyWeight }[]` y `topRatio` con el máximo histórico
+- Todo en 4-5 queries máximo (ya batch-fetched), cómputo en memoria con `useMemo` en el componente
 
-### Solución: Batch-fetch y cómputo en memoria
+**2. `src/components/RelativeStrengthPanel.tsx**` — Nuevo componente:
 
-Refactorizar `src/db/calculations.ts` para que todas las funciones pesadas hagan **máximo 4-5 queries totales** y computen todo en memoria:
+- Selector de ejercicio (solo `weight_reps`)
+- `useMemo` para recalcular el ratio al cambiar de ejercicio (instantáneo)
+- Gráfico de líneas: eje Y = ratio, eje X = fechas
+- Tarjeta "Top Ratio Histórico" (ej: "En Press Banca mueves 1.8× tu peso corporal")
+- Interpretación IA: texto condicional basado en tendencia del ratio vs peso corporal:
+  - Ratio sube + peso baja/estable → mensaje positivo
+  - Ratio baja → mensaje de alerta
 
-1. **`getMuscleComparisons`** — En vez de N×M queries:
-   - 1 query: muscles
-   - 1 query: exercises (ya cacheado)
-   - 1 query: sessions en el rango total (curr + prev)
-   - 1 query: session_exercises de esas sesiones
-   - 1 query: sets de esos session_exercises
-   - Luego agrupar y calcular todo en JS
+**3. `src/pages/Analysis.tsx**` — Añadir nueva pestaña "F.Relativa" en el TabsList (grid pasa a 5 columnas en la segunda fila o se ajusta)
 
-2. **`getPersonalRecords`** — Mismo patrón: fetch all sessions → all session_exercises → all sets en 3 queries, luego agrupar por ejercicio en memoria.
+### Lógica de interpretación IA (in-component, sin llamada a edge function)
 
-3. **`getAll1RMs`** — Mismo batch-fetch.
+```typescript
+// Comparar primer y último punto del gráfico
+const first = data[0], last = data[data.length - 1];
+const ratioTrend = last.ratio - first.ratio;
+const weightTrend = last.bodyWeight - first.bodyWeight;
 
-4. **`get1RMHistory`** — Batch-fetch sessions + session_exercises + sets para el ejercicio.
+if (ratioTrend > 0 && weightTrend <= 0) → "¡Eficiencia brutal!..."
+if (ratioTrend < 0) → "Ojo, tu peso está subiendo..."
+```
 
-5. **`getPeriodSummaries`** — Fetch all sessions del rango completo (8 semanas o 6 meses) de una vez, con sus session_exercises y sets. Agrupar por período en memoria.
+4. quita la pestaña racha del análisis ya que la tenemos en el inicio.
 
-6. **`getExerciseComparisons`** — Refactorizar `exerciseMetricInRange` para que reciba datos pre-fetched en vez de hacer queries propias.
-
-7. **Helper `prefetchSessionData`** — Nueva función que hace el batch-fetch reutilizable:
-   ```typescript
-   async function prefetchSessionData(dateFrom: string, dateTo: string) {
-     // 3 queries total: sessions, session_exercises, sets
-     // Returns maps indexed for fast lookup
-   }
-   ```
+&nbsp;
 
 ### Archivos afectados
 
-| Archivo | Acción |
-|---|---|
-| `src/db/calculations.ts` | Refactorizar todas las funciones de análisis para usar batch-fetch |
 
-No se necesitan migraciones ni cambios de UI — solo optimización de queries.
-
+| Archivo                                    | Acción                                     |
+| ------------------------------------------ | ------------------------------------------ |
+| `src/db/calculations.ts`                   | Nueva función `getRelativeStrengthHistory` |
+| `src/components/RelativeStrengthPanel.tsx` | Nuevo componente completo                  |
+| `src/pages/Analysis.tsx`                   | Añadir pestaña + import                    |
