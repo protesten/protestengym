@@ -93,8 +93,13 @@ export default function SessionCalendar() {
               {daySessions.map(s => (
                 <div key={s.id} className="rounded-xl bg-card border border-border p-3 flex items-center justify-between gap-2">
                   <Link to={`/session/${s.id}`} className="flex-1 min-w-0">
-                    <div className="text-sm font-semibold truncate">
-                      Sesión {s.date}
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold">
+                        {new Date(s.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${(s as any).is_completed ? 'bg-green-500/15 text-green-500' : 'bg-yellow-500/15 text-yellow-500'}`}>
+                        {(s as any).is_completed ? '✓' : 'Pend.'}
+                      </span>
                     </div>
                     {s.notes && <p className="text-xs text-muted-foreground truncate">{s.notes}</p>}
                   </Link>

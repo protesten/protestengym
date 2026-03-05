@@ -401,6 +401,7 @@ export type Database = {
           created_at: string
           date: string
           id: string
+          is_completed: boolean
           notes: string | null
           routine_id: string | null
           user_id: string
@@ -409,6 +410,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          is_completed?: boolean
           notes?: string | null
           routine_id?: string | null
           user_id: string
@@ -417,6 +419,7 @@ export type Database = {
           created_at?: string
           date?: string
           id?: string
+          is_completed?: boolean
           notes?: string | null
           routine_id?: string | null
           user_id?: string

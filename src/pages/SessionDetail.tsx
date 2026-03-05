@@ -26,7 +26,7 @@ import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggesti
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download, CheckCircle2 } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download, CheckCircle2, Flag } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { Progress } from '@/components/ui/progress';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -508,7 +508,7 @@ export default function SessionDetail() {
                 size="sm"
                 variant="outline"
                 className="mt-1.5 w-full rounded-lg h-8 text-xs font-bold border-primary/30 text-primary hover:bg-primary/10"
-                onClick={() => {
+                onClick={async () => {
                   // Find next exercise in the full list
                   const allSes = sessionExercises ?? [];
                   const currentIdx = allSes.findIndex(s => s.id === se.id);
@@ -520,8 +520,12 @@ export default function SessionDetail() {
                       addSetMutation.mutate(nextSe.id);
                     }
                   } else {
+                    // Last exercise — mark session as completed
                     setActiveExerciseId(null);
-                    toast.success('🎉 ¡Último ejercicio completado!');
+                    await updateSession(sessionId, { is_completed: true } as any);
+                    invalidateSession();
+                    queryClient.invalidateQueries({ queryKey: ['sessions'] });
+                    toast.success('🎉 ¡Sesión completada!');
                   }
                 }}
               >
@@ -621,6 +625,28 @@ export default function SessionDetail() {
         <ExerciseSearchSelect exercises={exercises} value={addExId} onChange={setAddExId} />
         <Button size="icon" className="gradient-primary text-primary-foreground border-0 rounded-lg shrink-0" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
       </div>
+
+      {/* Finalize session button */}
+      {!(session as any).is_completed && (
+        <Button
+          className="mt-4 w-full h-11 rounded-xl gradient-primary text-primary-foreground border-0 font-bold text-sm gap-2 glow-primary"
+          onClick={async () => {
+            await updateSession(sessionId, { is_completed: true } as any);
+            invalidateSession();
+            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+            toast.success('🎉 ¡Sesión completada!');
+          }}
+        >
+          <Flag className="h-4 w-4" />
+          Finalizar sesión
+        </Button>
+      )}
+      {(session as any).is_completed && (
+        <div className="mt-4 flex items-center justify-center gap-2 py-2 text-sm font-bold text-green-500">
+          <CheckCircle2 className="h-4 w-4" />
+          Sesión completada
+        </div>
+      )}
 
       {/* Summary */}
       {summary && (

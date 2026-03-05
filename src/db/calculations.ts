@@ -69,12 +69,14 @@ interface PrefetchedData {
 }
 
 /** Batch-fetch all session data for a date range in 3 queries */
-async function prefetchSessionData(dateFrom: string, dateTo: string): Promise<PrefetchedData> {
+async function prefetchSessionData(dateFrom: string, dateTo: string, onlyCompleted = true): Promise<PrefetchedData> {
   // Query 1: sessions
-  const { data: sessions } = await supabase
+  let query = supabase
     .from('sessions').select('*')
     .gte('date', dateFrom).lte('date', dateTo)
     .order('date', { ascending: false });
+  if (onlyCompleted) query = query.eq('is_completed', true);
+  const { data: sessions } = await query;
   const sessionList = sessions ?? [];
 
   const sessionIds = sessionList.map(s => s.id);
@@ -401,7 +403,7 @@ export async function getSessionSummary(sessionId: string): Promise<SessionSumma
 }
 
 export async function getAllSessionSummaries(): Promise<SessionSummary[]> {
-  const { data: sessions } = await supabase.from('sessions').select('*').order('date', { ascending: false });
+  const { data: sessions } = await supabase.from('sessions').select('*').eq('is_completed', true).order('date', { ascending: false });
   if (!sessions?.length) return [];
 
   const oldest = sessions[sessions.length - 1].date;
