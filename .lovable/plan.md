@@ -1,64 +1,47 @@
 
 
-## Optimización de rendimiento: Code splitting y lazy loading
+## Plan: Corrección de 4 problemas de seguridad restantes
 
-### Problema principal
-Lighthouse reporta **284 KiB de JavaScript sin usar** en la carga inicial. Esto ocurre porque todas las 16 páginas se importan estáticamente en `App.tsx`, generando un único bundle monolítico (`index-DOzfjKOZ.js` de 417 KB). El usuario solo necesita una página a la vez.
+### 1. HTML Injection en notificación admin (edge function)
+**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
 
-### Solución
+Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
 
-#### 1. Lazy loading de todas las páginas (`src/App.tsx`)
-Reemplazar los 16 imports estáticos por `React.lazy()` + `Suspense`:
+### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
+**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
 
-```typescript
-import { lazy, Suspense } from "react";
+**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
 
-const Index = lazy(() => import("./pages/Index"));
-const Exercises = lazy(() => import("./pages/Exercises"));
-const Routines = lazy(() => import("./pages/Routines"));
-// ... todas las demás páginas
+```sql
+CREATE OR REPLACE FUNCTION public.is_approved_user()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND is_approved = true
+  );
+$$;
 ```
 
-Envolver las rutas en `<Suspense fallback={<LoadingSpinner />}>` para mostrar un indicador de carga mientras se descarga el chunk de cada página.
+Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
 
-#### 2. Componente de carga ligero
-Crear un spinner/skeleton simple y ligero que se muestre durante la carga de cada chunk.
+Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
 
-#### 3. Vite manual chunks (`vite.config.ts`)
-Separar las dependencias pesadas (recharts, html2canvas, date-fns) en chunks independientes para mejorar el cacheo:
+### 3. Error messages internos expuestos (3 edge functions)
+**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
 
-```typescript
-build: {
-  rollupOptions: {
-    output: {
-      manualChunks: {
-        'vendor-react': ['react', 'react-dom', 'react-router-dom'],
-        'vendor-ui': ['@radix-ui/react-dialog', '@radix-ui/react-popover', ...],
-        'vendor-charts': ['recharts'],
-        'vendor-supabase': ['@supabase/supabase-js'],
-      }
-    }
-  }
-}
-```
+Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
 
-Esto permite que el navegador cachee las librerías por separado y solo descargue el código de la página que el usuario visita.
-
-### Impacto esperado
-- Reducción del bundle inicial de ~417 KB a ~80-120 KB (solo React + router + auth)
-- Cada página se carga bajo demanda (~30-80 KB por chunk)
-- Mejor cache hit rate al separar vendor chunks
-- Mejora directa en FCP, LCP y Speed Index
+### 4. Leaked password protection
+Activar mediante la herramienta de configuración de autenticación.
 
 ### Archivos afectados
 
 | Archivo | Cambio |
 |---|---|
-| `src/App.tsx` | Lazy imports + Suspense wrapper |
-| `vite.config.ts` | Manual chunks para vendor splitting |
-
-### Nota sobre otros issues
-- **Redirects (230ms)**: Es el redirect del dominio personalizado, no controlable desde código.
-- **Cache lifetimes**: Depende de la configuración del servidor/CDN de hosting, no del código fuente.
-- **Render-blocking CSS**: El CSS de Vite ya es mínimo (12 KB); no hay ganancia significativa al inlinearlo.
+| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
+| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
+| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
+| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
+| Auth config | Leaked password protection |
 
