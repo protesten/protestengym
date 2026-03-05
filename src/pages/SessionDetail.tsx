@@ -26,8 +26,10 @@ import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggesti
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Plus, Trash2, ArrowLeft, StickyNote, ChevronUp, ChevronDown, Copy, CalendarIcon, Download, Share2, Video } from 'lucide-react';
+import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
+import { Progress } from '@/components/ui/progress';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { SessionExportCard } from '@/components/SessionExportCard';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
@@ -209,10 +211,10 @@ export default function SessionDetail() {
 
   const [summary, setSummary] = useState<SessionSummary | null>(null);
   const [addExId, setAddExId] = useState('');
-  const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
   const [showExportCard, setShowExportCard] = useState(false);
   const [datePopoverOpen, setDatePopoverOpen] = useState(false);
+  const [activeExerciseId, setActiveExerciseId] = useState<string | null>(null);
   const exportCardRef = React.useRef<HTMLDivElement>(null);
 
   useEffect(() => { if (session) setNotes(session.notes ?? ''); }, [session]);
@@ -224,7 +226,7 @@ export default function SessionDetail() {
     queryClient.invalidateQueries({ queryKey: ['sets', sessionId] });
   };
 
-  const saveNotesMutation = useMutation({ mutationFn: () => updateSession(sessionId, { notes }), onSuccess: () => { setEditingNotes(false); toast.success('Notas guardadas'); invalidateSession(); } });
+  const saveNotesMutation = useMutation({ mutationFn: () => updateSession(sessionId, { notes }), onSuccess: () => { toast.success('Notas guardadas'); invalidateSession(); } });
   const deleteSessionMutation = useMutation({ mutationFn: () => deleteSessionApi(sessionId), onSuccess: () => { toast.success('Sesión eliminada'); navigate('/'); } });
   const duplicateMutation = useMutation({
     mutationFn: async () => {
@@ -276,12 +278,10 @@ export default function SessionDetail() {
     },
     onError: (_err, vars, ctx) => {
       if (ctx?.prev) queryClient.setQueryData(setsQueryKey, ctx.prev);
-      // Offline fallback: enqueue for retry
       enqueueOffline(vars.setId, vars.data as Record<string, unknown>);
       toast.info('Sin conexión — cambios guardados localmente');
     },
     onSuccess: async (_res, { setId, data, exerciseId }) => {
-
       if (exerciseId && (data.weight != null || data.reps != null || data.duration_seconds != null || data.distance_meters != null)) {
         const currentSet = allSets?.find(s => s.id === setId);
         if (currentSet) {
@@ -371,7 +371,6 @@ export default function SessionDetail() {
     toast.success('CSV exportado');
   };
 
-  // Weight suggestion: apply to first empty set of an exercise
   const handleApplyWeight = (seId: string, weight: number) => {
     const sets = getSets(seId);
     const emptySet = sets.find(s => s.weight == null);
@@ -383,32 +382,172 @@ export default function SessionDetail() {
     }
   };
 
+  // ── Exercise grouping ──
+  const exercisesGrouped = useMemo(() => {
+    if (!sessionExercises) return { withSets: [] as typeof sessionExercises, upcoming: [] as typeof sessionExercises };
+    const withSets = sessionExercises.filter(se => getSets(se.id).length > 0);
+    const upcoming = sessionExercises.filter(se => getSets(se.id).length === 0);
+    return { withSets, upcoming };
+  }, [sessionExercises, allSets]);
+
+  // Progress
+  const totalExercises = sessionExercises?.length ?? 0;
+  const completedExercises = exercisesGrouped.withSets.length;
+  const progressPct = totalExercises > 0 ? Math.round((completedExercises / totalExercises) * 100) : 0;
+
+  // Auto-select first active exercise
+  useEffect(() => {
+    if (!activeExerciseId && sessionExercises?.length) {
+      const firstUpcoming = exercisesGrouped.upcoming[0];
+      const firstWithSets = exercisesGrouped.withSets[0];
+      setActiveExerciseId(firstUpcoming?.id ?? firstWithSets?.id ?? null);
+    }
+  }, [sessionExercises, activeExerciseId, exercisesGrouped]);
+
   if (!session) return <div className="p-4 text-muted-foreground">Cargando...</div>;
+
+  const renderExerciseContent = (se: { exercise_id: string; id: string; order_index: number; session_id: string }) => {
+    const ex = getExercise(se.exercise_id);
+    const sets = getSets(se.id);
+    const plannedSets = plannedSetsMap.get(se.exercise_id) ?? [];
+    const prevData = prevSetsMap?.get(se.exercise_id);
+    const prevSets = prevData?.sets ?? [];
+    const prevDate = prevData?.date ?? null;
+    const idx = sessionExercises!.indexOf(se);
+    const isFirst = idx === 0;
+    const isLast = idx === (sessionExercises!.length - 1);
+
+    return (
+      <div key={se.id} className={cn(
+        "rounded-xl border bg-card transition-all",
+        activeExerciseId === se.id ? "border-primary/40 shadow-[0_0_12px_hsl(var(--primary)/0.1)]" : "border-border"
+      )}>
+        {/* Exercise header */}
+        <div
+          className="flex items-center gap-1.5 px-3 py-2.5 cursor-pointer"
+          onClick={() => setActiveExerciseId(activeExerciseId === se.id ? null : se.id)}
+        >
+          <div className="flex flex-col">
+            <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={e => { e.stopPropagation(); moveExMutation.mutate({ seId: se.id, direction: 'up' }); }}><ChevronUp className="h-3 w-3" /></Button>
+            <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={e => { e.stopPropagation(); moveExMutation.mutate({ seId: se.id, direction: 'down' }); }}><ChevronDown className="h-3 w-3" /></Button>
+          </div>
+          <span className="text-sm font-bold flex-1 truncate">{ex?.name ?? 'Ejercicio'}</span>
+          {/* Collapsed badge - show target when not active */}
+          {activeExerciseId !== se.id && sets.length > 0 && (
+            <span className="text-[10px] text-muted-foreground font-medium">
+              {sets.length} series
+            </span>
+          )}
+          <div className="flex items-center gap-0" onClick={e => e.stopPropagation()}>
+            {ex?.video_url && (
+              <a href={ex.video_url} target="_blank" rel="noopener noreferrer" title="Ver video">
+                <Video className="h-4 w-4 text-primary mx-1" />
+              </a>
+            )}
+            <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={ex?.notes ?? null} source={ex?.source ?? 'personal'} />
+            {ex?.tracking_type === 'weight_reps' && (
+              <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} onApply={(w) => handleApplyWeight(se.id, w)} />
+            )}
+            <AlertDialog>
+              <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive/70"><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
+              <AlertDialogContent className="bg-card border-border rounded-2xl">
+                <AlertDialogHeader><AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle><AlertDialogDescription>Se borrarán todas las series.</AlertDialogDescription></AlertDialogHeader>
+                <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+
+        {/* Expanded content */}
+        {activeExerciseId === se.id && (
+          <div className="px-3 pb-3">
+            {/* Target weight badge */}
+            {ex?.tracking_type === 'weight_reps' && (
+              <div className="mb-2">
+                <TargetWeightBadge exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} />
+              </div>
+            )}
+
+            {/* Previous session */}
+            <PreviousSessionReference sets={prevSets} date={prevDate} trackingType={ex?.tracking_type ?? 'weight_reps'} />
+
+            {/* Sets label */}
+            {sets.length > 0 && (
+              <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2 mb-1.5">Registro de series</p>
+            )}
+
+            {/* Sets */}
+            <div className="space-y-1">
+              {sets.map((s, setIdx) => (
+                <div key={s.id}>
+                  <SetRow
+                    set={s}
+                    trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
+                    plannedSet={plannedSets[setIdx]}
+                    prevSet={prevSets[setIdx]}
+                    onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
+                    onDelete={() => deleteSetMutation.mutate(s.id)}
+                  />
+                  <RPEFeedback rpe={s.rpe as number | null} weight={s.weight} />
+                </div>
+              ))}
+            </div>
+
+            {/* Add set button - prominent */}
+            <Button
+              size="sm"
+              className="mt-2 w-full rounded-lg gradient-primary text-primary-foreground border-0 h-9 text-xs font-bold"
+              onClick={() => addSetMutation.mutate(se.id)}
+            >
+              <Plus className="h-3.5 w-3.5 mr-1" />Serie
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="p-3 pb-24 max-w-lg mx-auto">
-      {/* Header */}
-      <button onClick={() => navigate('/')} className="flex items-center gap-1 text-muted-foreground mb-3 text-sm font-medium hover:text-foreground transition-colors">
-        <ArrowLeft className="h-4 w-4" />Inicio
-      </button>
+      {/* Progress bar */}
+      <div className="mb-3">
+        <div className="flex items-center justify-between mb-1">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground">Progreso</span>
+          <span className="text-[10px] font-mono text-muted-foreground">{completedExercises}/{totalExercises}</span>
+        </div>
+        <Progress value={progressPct} className="h-2" />
+      </div>
 
+      {/* Simplified header */}
       <div className="flex items-center justify-between mb-2">
-        <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
-          <PopoverTrigger asChild>
-            <Button variant="ghost" className="text-lg font-black px-2 h-auto py-1 gap-1.5 hover:bg-secondary/50">
-              {session.date}
-              <CalendarIcon className="h-3.5 w-3.5 text-primary" />
-            </Button>
-          </PopoverTrigger>
-          <PopoverContent className="w-auto p-0 bg-card border-border rounded-xl pointer-events-auto" align="start" sideOffset={4}>
-            <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); setDatePopoverOpen(false); } }} initialFocus className="p-3 pointer-events-auto" />
-          </PopoverContent>
-        </Popover>
-        <div className="flex gap-0.5">
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleExportSession} title="Descargar"><Download className="h-3.5 w-3.5" /></Button>
+        <div className="flex items-center gap-1">
+          <button onClick={() => navigate('/')} className="text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+          </button>
+          <Popover open={datePopoverOpen} onOpenChange={setDatePopoverOpen}>
+            <PopoverTrigger asChild>
+              <Button variant="ghost" className="text-base font-black px-2 h-auto py-1 gap-1.5 hover:bg-secondary/50">
+                {session.date}
+                <CalendarIcon className="h-3.5 w-3.5 text-primary" />
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-0 bg-card border-border rounded-xl pointer-events-auto" align="start" sideOffset={4}>
+              <Calendar mode="single" selected={parseISO(session.date)} onSelect={async (date) => { if (date) { const newDate = format(date, 'yyyy-MM-dd'); await updateSession(sessionId, { date: newDate }); invalidateSession(); toast.success('Fecha actualizada'); setDatePopoverOpen(false); } }} initialFocus className="p-3 pointer-events-auto" />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="flex gap-0.5 items-center">
           <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleShareSession} title="Compartir"><Share2 className="h-3.5 w-3.5" /></Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={handleExportCSV} title="CSV"><span className="text-[9px] font-mono font-bold">CSV</span></Button>
-          <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => duplicateMutation.mutate()} title="Duplicar"><Copy className="h-3.5 w-3.5" /></Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" className="h-7 w-7"><MoreHorizontal className="h-3.5 w-3.5" /></Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="bg-card border-border rounded-xl">
+              <DropdownMenuItem onClick={handleExportSession}><Download className="h-3.5 w-3.5 mr-2" />Descargar imagen</DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportCSV}><span className="text-[9px] font-mono font-bold mr-2">CSV</span>Exportar CSV</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => duplicateMutation.mutate()}><Copy className="h-3.5 w-3.5 mr-2" />Duplicar sesión</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
           <AlertDialog>
             <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 text-destructive"><Trash2 className="h-3.5 w-3.5" /></Button></AlertDialogTrigger>
             <AlertDialogContent className="bg-card border-border rounded-2xl">
@@ -419,95 +558,32 @@ export default function SessionDetail() {
         </div>
       </div>
 
-      {/* Notes */}
-      <div className="mb-3">
-        {editingNotes ? (
-          <div className="space-y-2">
-            <Textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="Notas..." className="text-sm min-h-[50px] rounded-xl bg-secondary/30 border-border" />
-            <div className="flex gap-2">
-              <Button size="sm" className="gradient-primary text-primary-foreground border-0 rounded-lg" onClick={() => saveNotesMutation.mutate()}>Guardar</Button>
-              <Button size="sm" variant="ghost" onClick={() => { setEditingNotes(false); setNotes(session.notes ?? ''); }}>Cancelar</Button>
-            </div>
-          </div>
-        ) : (
-          <button onClick={() => setEditingNotes(true)} className="flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors">
-            <StickyNote className="h-3.5 w-3.5" />
-            {session.notes ? <span className="text-foreground text-xs">{session.notes}</span> : <span className="text-xs">Notas...</span>}
-          </button>
-        )}
+      {/* Inline notes */}
+      <Input
+        value={notes}
+        onChange={e => setNotes(e.target.value)}
+        onBlur={() => { if (notes !== (session.notes ?? '')) saveNotesMutation.mutate(); }}
+        placeholder="Notas..."
+        className="mb-3 h-8 text-xs rounded-lg bg-secondary/30 border-border"
+      />
+
+      {/* Exercises with sets (active + collapsed) */}
+      <div className="space-y-2">
+        {exercisesGrouped.withSets.map(se => renderExerciseContent(se))}
       </div>
 
-      {/* Exercises */}
-      <Accordion type="multiple" className="space-y-2">
-        {sessionExercises?.map((se, idx) => {
-          const ex = getExercise(se.exercise_id);
-          const sets = getSets(se.id);
-          const plannedSets = plannedSetsMap.get(se.exercise_id) ?? [];
-          const prevData = prevSetsMap?.get(se.exercise_id);
-          const prevSets = prevData?.sets ?? [];
-          const prevDate = prevData?.date ?? null;
-          const isFirst = idx === 0;
-          const isLast = idx === (sessionExercises.length - 1);
-          return (
-            <AccordionItem key={se.id} value={se.id} className="border border-border rounded-xl px-2 bg-card">
-              <div className="flex items-center gap-0.5">
-                <div className="flex flex-col">
-                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isFirst} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'up' })}><ChevronUp className="h-3 w-3" /></Button>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" disabled={isLast} onClick={() => moveExMutation.mutate({ seId: se.id, direction: 'down' })}><ChevronDown className="h-3 w-3" /></Button>
-                </div>
-                <AccordionTrigger className="py-2.5 text-sm font-bold flex-1">{ex?.name ?? 'Ejercicio'}</AccordionTrigger>
-                <div className="flex items-center gap-0">
-                  {ex?.video_url && (
-                    <a href={ex.video_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Ver video">
-                      <Video className="h-4 w-4 text-primary mx-1" />
-                    </a>
-                  )}
-                  <ExerciseNotePopover exerciseId={se.exercise_id} exerciseNotes={ex?.notes ?? null} source={ex?.source ?? 'personal'} />
-                  {ex?.tracking_type === 'weight_reps' && (
-                    <WeightSuggestion exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} onApply={(w) => handleApplyWeight(se.id, w)} />
-                  )}
-                  <AlertDialog>
-                    <AlertDialogTrigger asChild><Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 text-destructive/70" onClick={e => e.stopPropagation()}><Trash2 className="h-3 w-3" /></Button></AlertDialogTrigger>
-                    <AlertDialogContent className="bg-card border-border rounded-2xl">
-                      <AlertDialogHeader><AlertDialogTitle>¿Eliminar {ex?.name}?</AlertDialogTitle><AlertDialogDescription>Se borrarán todas las series.</AlertDialogDescription></AlertDialogHeader>
-                      <AlertDialogFooter><AlertDialogCancel>Cancelar</AlertDialogCancel><AlertDialogAction onClick={() => deleteSeMutation.mutate(se.id)} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">Eliminar</AlertDialogAction></AlertDialogFooter>
-                    </AlertDialogContent>
-                  </AlertDialog>
-                </div>
-              </div>
-              {ex?.tracking_type === 'weight_reps' && (
-                <div className="px-2 pb-1">
-                  <TargetWeightBadge exerciseId={se.exercise_id} exerciseName={ex?.name ?? ''} trainingGoal={(trainingGoal as TrainingGoal) ?? null} />
-                </div>
-              )}
-              <AccordionContent>
-                <PreviousSessionReference sets={prevSets} date={prevDate} trackingType={ex?.tracking_type ?? 'weight_reps'} />
-                <div className="space-y-1">
-                  {sets.map((s, setIdx) => (
-                    <div key={s.id}>
-                      <SetRow
-                        set={s}
-                        trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
-                        plannedSet={plannedSets[setIdx]}
-                        prevSet={prevSets[setIdx]}
-                        onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
-                        onDelete={() => deleteSetMutation.mutate(s.id)}
-                      />
-                      <RPEFeedback rpe={s.rpe as number | null} weight={s.weight} />
-                    </div>
-                  ))}
-                </div>
-                <Button variant="outline" size="sm" className="mt-2 w-full rounded-lg border-dashed border-border hover:border-primary/30 h-8 text-xs" onClick={() => addSetMutation.mutate(se.id)}>
-                  <Plus className="h-3 w-3 mr-1" />Serie
-                </Button>
-              </AccordionContent>
-            </AccordionItem>
-          );
-        })}
-      </Accordion>
+      {/* Upcoming exercises */}
+      {exercisesGrouped.upcoming.length > 0 && (
+        <div className="mt-4">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mb-2">Siguientes ejercicios</p>
+          <div className="space-y-1.5">
+            {exercisesGrouped.upcoming.map(se => renderExerciseContent(se))}
+          </div>
+        </div>
+      )}
 
       {/* Add exercise */}
-      <div className="flex gap-2 mt-3">
+      <div className="flex gap-2 mt-4">
         <ExerciseSearchSelect exercises={exercises} value={addExId} onChange={setAddExId} />
         <Button size="icon" className="gradient-primary text-primary-foreground border-0 rounded-lg shrink-0" onClick={() => addExMutation.mutate()} disabled={!addExId}><Plus className="h-4 w-4" /></Button>
       </div>
@@ -521,8 +597,6 @@ export default function SessionDetail() {
           {summary.cardioTime > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Cardio</span><span className="font-mono font-bold">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
         </div>
       )}
-
-      
 
       {hasOfflinePending && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-card border border-border rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-lg">
