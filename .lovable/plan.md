@@ -1,86 +1,80 @@
 
 
-## Sistema Inteligente de Recomendación de Peso por Objetivo
+## Módulo "Coach IA" — Inteligencia de Entrenamiento
 
 ### Concepto
 
-Reemplazar el `WeightSuggestion` actual (que solo muestra media/máximo) por un sistema basado en 1RM que calcule pesos objetivo según el enfoque de entrenamiento (Fuerza/Hipertrofia/Resistencia), integre peso corporal para ejercicios de bodyweight, y dé feedback inteligente basado en RPE al completar series.
+Una nueva página `/coach` con un botón "Consultar al Coach" que recopila datos del usuario (historial de ejercicios, RPE, medidas antropométricas), los envía a una edge function que llama al Lovable AI Gateway (GPT), y muestra un análisis personalizado en cards con colores según el estado (verde/ámbar/rojo).
+
+### Arquitectura
+
+```text
+[CoachPage] → recopila datos del cliente → POST /functions/v1/ai-coach
+                                                    ↓
+                                          [Edge Function ai-coach]
+                                                    ↓
+                                          Lovable AI Gateway (GPT)
+                                                    ↓
+                                          JSON estructurado con análisis
+                                                    ↓
+                                          [CoachPage] renderiza cards
+```
 
 ### Cambios
 
-**1. DB Migration: Añadir `training_goal` a `routines` y `program_weeks`**
+**1. Edge Function `supabase/functions/ai-coach/index.ts`**
 
-- `routines.training_goal` (text, nullable, default null): `'strength'` | `'hypertrophy'` | `'endurance'`
-- `program_weeks.training_goal` (text, nullable, default null): mismo enum
-- Esto permite definir el objetivo a nivel de rutina o semana del programa
+- Recibe los datos preprocesados del cliente (resúmenes de 1RM por ejercicio en las últimas N sesiones, RPE promedio semanal, peso corporal y % grasa recientes, estancamientos detectados).
+- Construye un system prompt que instruye al modelo a analizar:
+  - **Estancamiento**: ejercicios con 3+ sesiones sin mejora de 1RM.
+  - **Fuerza relativa**: si peso baja pero 1RM se mantiene/sube.
+  - **Fatiga**: si RPE promedio semanal > 8.5, sugerir deload.
+- Usa tool calling para extraer respuesta estructurada: `{ achievement: string, alert: string, advice: string, status: 'progress' | 'plateau' | 'overtraining' }`.
+- Añadir al `config.toml`: `[functions.ai-coach] verify_jwt = false`.
 
-**2. `src/lib/constants.ts`**: Añadir constantes de objetivos
+**2. `src/db/coach-data.ts`** (nuevo) — Funciones de recopilación de datos
+
+- `getCoachData()`: función que recopila todo lo necesario para el análisis:
+  - Por cada ejercicio `weight_reps`: 1RM de las últimas 5 sesiones (usando `calculate1RM` existente). Detecta estancamiento (3+ sesiones sin mejora).
+  - RPE promedio de la última semana.
+  - Últimas 2 mediciones de peso corporal y % grasa (de `body_measurements`).
+  - Devuelve un objeto listo para enviar al edge function.
+
+**3. `src/pages/Coach.tsx`** (nuevo)
+
+- Botón "Consultar al Coach" que llama a `getCoachData()` y envía a la edge function.
+- Muestra 3 cards con el resultado:
+  - **Logro de la semana** (borde verde si `status === 'progress'`).
+  - **Alerta de mejora** (borde ámbar si `status === 'plateau'`).
+  - **Consejo personalizado** (borde rojo si `status === 'overtraining'`, verde si no).
+- Estado de carga con skeleton.
+- Historial de consultas anteriores guardado en `localStorage` (no necesita DB).
+
+**4. `src/App.tsx`**: Añadir ruta `/coach`.
+
+**5. `src/components/BottomNav.tsx`**: Añadir "Coach" al menú "Más" con icono `Brain`.
+
+### Lógica de detección de estancamiento (cliente)
 
 ```typescript
-export type TrainingGoal = 'strength' | 'hypertrophy' | 'endurance';
-export const TRAINING_GOALS: Record<TrainingGoal, { label: string; pct: number; reps: string }> = {
-  strength: { label: 'Fuerza', pct: 0.85, reps: '3-5' },
-  hypertrophy: { label: 'Hipertrofia', pct: 0.75, reps: '8-12' },
-  endurance: { label: 'Resistencia', pct: 0.60, reps: '15+' },
-};
+// Para cada ejercicio, obtener 1RM por sesión (últimas 5)
+// Si las últimas 3 sesiones tienen 1RM <= max de las 3 anteriores → "meseta"
 ```
 
-**3. `src/lib/api.ts`**: Nuevas funciones
-- `get1RMForExercise(exerciseId)`: obtener el mejor 1RM histórico usando Epley (ya existe `calculate1RM` en calculations.ts, reusar)
-- `getLatestBodyWeight()`: obtener el último `weight_kg` de `body_measurements`
+### Prompt del sistema (edge function)
 
-**4. `src/components/WeightSuggestion.tsx`**: Rediseñar completamente
-
-Reemplazar el popover simple por un sistema que:
-- Calcule 1RM del ejercicio desde historial
-- Muestre peso objetivo según el goal de la sesión (Fuerza/Hipertrofia/Resistencia)
-- Para ejercicios de peso corporal (`reps_only` con flag o detección por nombre: dominadas, flexiones, fondos): sume peso corporal al cálculo y reste para dar el lastre
-- Muestre el peso objetivo directamente en la tarjeta del ejercicio (no solo en popover)
-
-**5. `src/components/RPEFeedback.tsx`** (nuevo)
-
-Componente que aparece tras registrar RPE en una serie:
-- RPE ≤ 7: mensaje verde "Muy fácil. Sube un 5% en la próxima sesión" + peso sugerido
-- RPE 8-9: mensaje amarillo "Carga óptima. Mantén o sube un 2%"
-- RPE 10: mensaje rojo "Límite alcanzado. Mantén este peso hasta dominar la técnica"
-- Aparece como un toast o inline debajo de la serie
-
-**6. `src/pages/SessionDetail.tsx`**: Integración
-
-- Mostrar peso objetivo encima de las series de cada ejercicio (badge visible antes de escribir datos)
-- Tras actualizar RPE de una serie, mostrar el feedback inteligente
-- Pasar el `training_goal` de la rutina/sesión al cálculo
-
-**7. `src/pages/RoutineDetail.tsx`**: Selector de objetivo
-
-- Añadir selector de `training_goal` en la cabecera de la rutina (Fuerza/Hipertrofia/Resistencia)
-- Guardar en DB
-
-**8. `src/pages/Programs.tsx`**: Selector por semana (si aplica)
-
-- En la vista de programa, permitir asignar goal por semana
-
-### Lógica de Cálculo
-
-```
-1RM = mejor (peso × (1 + reps/30)) del historial
-Peso objetivo = 1RM × %goal
-
-Para bodyweight (dominadas, fondos, flexiones):
-  1RM_total = (peso_corporal + lastre) × (1 + reps/30)
-  peso_objetivo_total = 1RM_total × %goal
-  lastre_sugerido = peso_objetivo_total - peso_corporal
-```
+El prompt instruirá al modelo a responder en español, ser conciso, usar los datos proporcionados, y devolver la estructura via tool calling. Incluirá reglas específicas sobre cuándo marcar cada status.
 
 ### Archivos afectados
 
 | Archivo | Acción |
 |---|---|
-| DB `routines`, `program_weeks` | Migración: añadir `training_goal` |
-| `src/lib/constants.ts` | Tipos y constantes de goals |
-| `src/lib/api.ts` | `get1RMForExercise`, `getLatestBodyWeight` |
-| `src/components/WeightSuggestion.tsx` | Rediseño completo con 1RM + goals |
-| `src/components/RPEFeedback.tsx` | Nuevo: feedback inteligente post-RPE |
-| `src/pages/SessionDetail.tsx` | Mostrar peso objetivo + integrar RPE feedback |
-| `src/pages/RoutineDetail.tsx` | Selector de training_goal |
+| `supabase/functions/ai-coach/index.ts` | Nuevo: edge function con Lovable AI |
+| `supabase/config.toml` | Añadir `[functions.ai-coach]` |
+| `src/db/coach-data.ts` | Nuevo: recopilación de datos para el coach |
+| `src/pages/Coach.tsx` | Nuevo: página del coach |
+| `src/App.tsx` | Añadir ruta `/coach` |
+| `src/components/BottomNav.tsx` | Añadir enlace al coach |
+
+No se necesitan migraciones de base de datos. Se usa `LOVABLE_API_KEY` ya configurado.
 
