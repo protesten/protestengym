@@ -18,7 +18,7 @@ import { Plus, Pencil, Trash2, Search, Video, AlertTriangle } from 'lucide-react
 import { toast } from 'sonner';
 import MuscleSelect from '@/components/MuscleSelect';
 import CreateExerciseDialog from '@/components/CreateExerciseDialog';
-import VideoPreview from '@/components/VideoPreview';
+import VideoPreview, { normalizeYouTubeUrl } from '@/components/VideoPreview';
 
 type ExForm = { name: string; tracking_type: TrackingType; primary_muscle_ids: number[]; secondary_muscle_ids: number[]; video_url: string };
 
@@ -114,7 +114,7 @@ export default function Exercises() {
           <div className="flex items-center gap-2">
             <p className="font-semibold text-sm">{ex.name}</p>
             {ex.video_url && (
-              <a href={ex.video_url} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Ver video">
+              <a href={normalizeYouTubeUrl(ex.video_url)} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()} title="Ver video">
                 <Video className="h-4 w-4 text-primary" />
               </a>
             )}
