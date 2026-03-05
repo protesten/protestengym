@@ -5,6 +5,11 @@ function getYouTubeId(url: string): string | null {
   return match?.[1] ?? null;
 }
 
+export function normalizeYouTubeUrl(url: string): string {
+  const id = getYouTubeId(url);
+  return id ? `https://www.youtube.com/watch?v=${id}` : url;
+}
+
 export default function VideoPreview({ url }: { url: string }) {
   const ytId = getYouTubeId(url);
 
@@ -23,7 +28,7 @@ export default function VideoPreview({ url }: { url: string }) {
   }
 
   return (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline">
+    <a href={normalizeYouTubeUrl(url)} target="_blank" rel="noopener noreferrer" className="flex items-center gap-1.5 text-xs text-primary hover:underline">
       <ExternalLink className="h-3.5 w-3.5" />
       Ver video
     </a>
