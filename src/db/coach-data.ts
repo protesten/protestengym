@@ -769,7 +769,6 @@ export async function getCoachData(): Promise<CoachData> {
 }
 
 function emptyCoachData(profile: any, measurements: any[]): CoachData {
-  const latestM = (measurements ?? [])[0];
   return {
     exercises: [],
     weeklyAvgRPE: null,
@@ -793,5 +792,15 @@ function emptyCoachData(profile: any, measurements: any[]): CoachData {
       age: profile?.birth_date ? differenceInYears(new Date(), parseISO(profile.birth_date)) : null,
       heightCm: profile?.height_cm ? Number(profile.height_cm) : null,
     },
+    progressionRate: [],
+    sessionTonnage: [],
+    exerciseVariety: [],
+    programAdherence: null,
+    trainingDayDistribution: [0, 0, 0, 0, 0, 0, 0],
+    relativeStrength: [],
+    rpeByExercise: [],
+    recentSessionNotes: [],
+    measurementTrends: { chest: [], arm: [], thigh: [], waist: [] },
+    availableRoutines: [],
   };
 }
