@@ -197,6 +197,8 @@ export async function getCoachData(): Promise<CoachData> {
     { data: measurements },
     { data: profile },
     { data: activePrograms },
+    { data: routines },
+    { data: sessionsWithNotes },
   ] = await Promise.all([
     supabase.from('exercises').select('id, name, tracking_type, primary_muscle_ids, secondary_muscle_ids'),
     supabase.from('predefined_exercises').select('id, name, tracking_type, primary_muscle_ids, secondary_muscle_ids'),
@@ -206,6 +208,8 @@ export async function getCoachData(): Promise<CoachData> {
     supabase.from('body_measurements').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(5),
     supabase.from('profiles').select('sex, birth_date, height_cm').eq('user_id', user.id).maybeSingle(),
     supabase.from('programs').select('id, name, weeks, deload_week, start_date, is_active').eq('user_id', user.id).eq('is_active', true).limit(1),
+    supabase.from('routines').select('name, training_goal').eq('user_id', user.id).limit(20),
+    supabase.from('sessions').select('notes, date').eq('user_id', user.id).not('notes', 'is', null).order('date', { ascending: false }).limit(3),
   ]);
 
   const allExercises = [
