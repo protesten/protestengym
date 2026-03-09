@@ -101,6 +101,46 @@ export interface ProfileData {
   heightCm: number | null;
 }
 
+export interface ProgressionRate {
+  exerciseName: string;
+  pctPerWeek: number; // linear slope as %/week
+  dataPoints: number;
+}
+
+export interface SessionTonnage {
+  date: string;
+  tonnage: number; // Σ(weight × reps)
+}
+
+export interface ExerciseVariety {
+  muscleName: string;
+  distinctExercises: number;
+}
+
+export interface RPEByExercise {
+  exerciseName: string;
+  avgRPE: number;
+  setCount: number;
+}
+
+export interface RelativeStrength {
+  exerciseName: string;
+  ratio: number; // 1RM / bodyWeight
+  rm: number;
+}
+
+export interface MeasurementTrends {
+  chest: { date: string; cm: number }[];
+  arm: { date: string; cm: number }[];
+  thigh: { date: string; cm: number }[];
+  waist: { date: string; cm: number }[];
+}
+
+export interface AvailableRoutine {
+  name: string;
+  goal: string | null;
+}
+
 export interface CoachData {
   exercises: ExerciseTrend[];
   weeklyAvgRPE: number | null;
@@ -121,6 +161,17 @@ export interface CoachData {
   recentPRs: RecentPR[];
   pushPullRatio: number | null;
   profile: ProfileData;
+  // v3 fields
+  progressionRate: ProgressionRate[];
+  sessionTonnage: SessionTonnage[];
+  exerciseVariety: ExerciseVariety[];
+  programAdherence: number | null; // 0-100%
+  trainingDayDistribution: number[]; // [Mon..Sun] counts last 28d
+  relativeStrength: RelativeStrength[];
+  rpeByExercise: RPEByExercise[];
+  recentSessionNotes: string[];
+  measurementTrends: MeasurementTrends;
+  availableRoutines: AvailableRoutine[];
 }
 
 // ============ Push/Pull classification by muscle group ============
@@ -146,6 +197,8 @@ export async function getCoachData(): Promise<CoachData> {
     { data: measurements },
     { data: profile },
     { data: activePrograms },
+    { data: routines },
+    { data: sessionsWithNotes },
   ] = await Promise.all([
     supabase.from('exercises').select('id, name, tracking_type, primary_muscle_ids, secondary_muscle_ids'),
     supabase.from('predefined_exercises').select('id, name, tracking_type, primary_muscle_ids, secondary_muscle_ids'),
@@ -155,6 +208,8 @@ export async function getCoachData(): Promise<CoachData> {
     supabase.from('body_measurements').select('*').eq('user_id', user.id).order('date', { ascending: false }).limit(5),
     supabase.from('profiles').select('sex, birth_date, height_cm').eq('user_id', user.id).maybeSingle(),
     supabase.from('programs').select('id, name, weeks, deload_week, start_date, is_active').eq('user_id', user.id).eq('is_active', true).limit(1),
+    supabase.from('routines').select('name, training_goal').eq('user_id', user.id).limit(20),
+    supabase.from('sessions').select('notes, date').eq('user_id', user.id).not('notes', 'is', null).order('date', { ascending: false }).limit(3),
   ]);
 
   const allExercises = [
@@ -556,6 +611,131 @@ export async function getCoachData(): Promise<CoachData> {
     .filter(m => m.body_fat_pct != null)
     .map(m => ({ date: m.date, pct: Number(m.body_fat_pct!) }));
 
+  // ============ 15. Progression rate (linear slope %/week) ============
+  const progressionRate: ProgressionRate[] = [];
+  for (const trend of exerciseTrends) {
+    if (trend.sessionRMs.length < 3) continue;
+    const sorted = [...trend.sessionRMs].sort((a, b) => a.date.localeCompare(b.date));
+    const firstDate = parseISO(sorted[0].date);
+    const lastDate = parseISO(sorted[sorted.length - 1].date);
+    const weeks = differenceInDays(lastDate, firstDate) / 7;
+    if (weeks < 1) continue;
+    const firstRM = sorted[0].rm;
+    const lastRM = sorted[sorted.length - 1].rm;
+    const pctPerWeek = firstRM > 0 ? Math.round((lastRM - firstRM) / firstRM * 100 / weeks * 10) / 10 : 0;
+    progressionRate.push({ exerciseName: trend.exerciseName, pctPerWeek, dataPoints: sorted.length });
+  }
+
+  // ============ 16. Session tonnage (last 10 sessions) ============
+  const sessionTonnage: SessionTonnage[] = [];
+  for (const sess of sessions.slice(0, 10)) {
+    const sessExsForSess = (sesExs ?? []).filter(se => se.session_id === sess.id);
+    let tonnage = 0;
+    for (const se of sessExsForSess) {
+      for (const s of (setsBySE.get(se.id) ?? []).filter(s => s.set_type === 'work')) {
+        tonnage += (Number(s.weight ?? 0)) * (s.reps ?? 0);
+      }
+    }
+    if (tonnage > 0) sessionTonnage.push({ date: sess.date, tonnage: Math.round(tonnage) });
+  }
+
+  // ============ 17. Exercise variety per muscle (last 28d) ============
+  const muscleExerciseSet = new Map<number, Set<string>>();
+  for (const se of (sesExs ?? [])) {
+    if (!sessions28Ids.has(se.session_id)) continue;
+    const ex = exerciseMap.get(se.exercise_id);
+    if (!ex) continue;
+    for (const mid of [...(ex.primary_muscle_ids ?? []) as number[], ...(ex.secondary_muscle_ids ?? []) as number[]]) {
+      const set = muscleExerciseSet.get(mid) ?? new Set<string>();
+      set.add(se.exercise_id);
+      muscleExerciseSet.set(mid, set);
+    }
+  }
+  const exerciseVariety: ExerciseVariety[] = [];
+  for (const [mid, exSet] of muscleExerciseSet) {
+    const m = muscleMap.get(mid);
+    if (m) exerciseVariety.push({ muscleName: m.name, distinctExercises: exSet.size });
+  }
+
+  // ============ 18. Program adherence ============
+  let programAdherence: number | null = null;
+  if (activeProgram && activePrograms?.length) {
+    const prog = activePrograms[0];
+    const { data: programWeeks } = await supabase
+      .from('program_weeks')
+      .select('routine_id')
+      .eq('program_id', prog.id);
+    const plannedRoutineIds = (programWeeks ?? []).map(pw => pw.routine_id).filter(Boolean) as string[];
+    if (plannedRoutineIds.length > 0) {
+      const completedRoutineIds = new Set(sessions.filter(s => s.routine_id).map(s => s.routine_id));
+      const matched = plannedRoutineIds.filter(rid => completedRoutineIds.has(rid)).length;
+      programAdherence = Math.round(matched / plannedRoutineIds.length * 100);
+    }
+  }
+
+  // ============ 19. Training day distribution (last 28d) ============
+  const trainingDayDistribution = [0, 0, 0, 0, 0, 0, 0]; // Mon-Sun
+  for (const s of sessions.filter(s => s.date >= since28)) {
+    const day = parseISO(s.date).getDay(); // 0=Sun
+    trainingDayDistribution[day === 0 ? 6 : day - 1]++;
+  }
+
+  // ============ 20. Relative strength ============
+  const latestWeight = bodyWeight.length > 0 ? bodyWeight[0].kg : null;
+  const relativeStrength: RelativeStrength[] = [];
+  if (latestWeight && latestWeight > 0) {
+    const entries = Array.from(exercise1RMMap.entries())
+      .map(([exId, rm]) => ({ exerciseName: exerciseMap.get(exId)?.name ?? '', rm, ratio: Math.round(rm / latestWeight * 100) / 100 }))
+      .filter(e => e.exerciseName)
+      .sort((a, b) => b.ratio - a.ratio)
+      .slice(0, 5);
+    relativeStrength.push(...entries);
+  }
+
+  // ============ 21. RPE by exercise ============
+  const rpeByExMap = new Map<string, { sum: number; count: number }>();
+  for (const se of (sesExs ?? [])) {
+    if (!sessions28Ids.has(se.session_id)) continue;
+    for (const s of (setsBySE.get(se.id) ?? [])) {
+      if (s.set_type === 'work' && s.rpe != null) {
+        const entry = rpeByExMap.get(se.exercise_id) ?? { sum: 0, count: 0 };
+        entry.sum += Number(s.rpe);
+        entry.count++;
+        rpeByExMap.set(se.exercise_id, entry);
+      }
+    }
+  }
+  const rpeByExercise: RPEByExercise[] = Array.from(rpeByExMap.entries())
+    .map(([exId, { sum, count }]) => ({
+      exerciseName: exerciseMap.get(exId)?.name ?? '',
+      avgRPE: Math.round(sum / count * 10) / 10,
+      setCount: count,
+    }))
+    .filter(e => e.exerciseName)
+    .sort((a, b) => b.avgRPE - a.avgRPE)
+    .slice(0, 10);
+
+  // ============ 22. Recent session notes ============
+  const recentSessionNotes = (sessionsWithNotes ?? [])
+    .filter(s => s.notes && s.notes.trim())
+    .map(s => `[${s.date}] ${s.notes!.trim()}`)
+    .slice(0, 3);
+
+  // ============ 23. Measurement trends ============
+  const mList = measurements ?? [];
+  const measurementTrends: MeasurementTrends = {
+    chest: mList.filter(m => m.chest_cm).map(m => ({ date: m.date, cm: Number(m.chest_cm) })),
+    arm: mList.filter(m => m.arm_cm).map(m => ({ date: m.date, cm: Number(m.arm_cm) })),
+    thigh: mList.filter(m => m.thigh_cm).map(m => ({ date: m.date, cm: Number(m.thigh_cm) })),
+    waist: mList.filter(m => m.waist_cm).map(m => ({ date: m.date, cm: Number(m.waist_cm) })),
+  };
+
+  // ============ 24. Available routines ============
+  const availableRoutines: AvailableRoutine[] = (routines ?? []).map(r => ({
+    name: r.name,
+    goal: r.training_goal,
+  }));
+
   return {
     exercises: exerciseTrends,
     weeklyAvgRPE: rpeCount > 0 ? Math.round((rpeSum / rpeCount) * 10) / 10 : null,
@@ -575,11 +755,20 @@ export async function getCoachData(): Promise<CoachData> {
     recentPRs,
     pushPullRatio,
     profile: profileData,
+    progressionRate,
+    sessionTonnage,
+    exerciseVariety,
+    programAdherence,
+    trainingDayDistribution,
+    relativeStrength,
+    rpeByExercise,
+    recentSessionNotes,
+    measurementTrends,
+    availableRoutines,
   };
 }
 
 function emptyCoachData(profile: any, measurements: any[]): CoachData {
-  const latestM = (measurements ?? [])[0];
   return {
     exercises: [],
     weeklyAvgRPE: null,
@@ -603,5 +792,15 @@ function emptyCoachData(profile: any, measurements: any[]): CoachData {
       age: profile?.birth_date ? differenceInYears(new Date(), parseISO(profile.birth_date)) : null,
       heightCm: profile?.height_cm ? Number(profile.height_cm) : null,
     },
+    progressionRate: [],
+    sessionTonnage: [],
+    exerciseVariety: [],
+    programAdherence: null,
+    trainingDayDistribution: [0, 0, 0, 0, 0, 0, 0],
+    relativeStrength: [],
+    rpeByExercise: [],
+    recentSessionNotes: [],
+    measurementTrends: { chest: [], arm: [], thigh: [], waist: [] },
+    availableRoutines: [],
   };
 }
