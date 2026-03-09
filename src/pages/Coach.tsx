@@ -1,228 +1,240 @@
-import { useState, useEffect } from 'react';
-import { Brain, Trophy, AlertTriangle, Lightbulb, Loader2, ArrowLeft, Clock, Activity } from 'lucide-react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import { Brain, Loader2, ArrowLeft, Send, RotateCcw } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Badge } from '@/components/ui/badge';
-import { getRPEBadge } from '@/components/RPEFeedback';
+import { Textarea } from '@/components/ui/textarea';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { useToast } from '@/hooks/use-toast';
-import { supabase } from '@/integrations/supabase/client';
 import { getCoachData } from '@/db/coach-data';
-import { format } from 'date-fns';
-import { es } from 'date-fns/locale';
-
-interface CoachAnalysis {
-  achievement: string;
-  alert: string;
-  advice: string;
-  status: 'progress' | 'plateau' | 'overtraining';
-  timestamp: string;
-  weeklyAvgRPE?: number | null;
-  last3SessionsAvgRPE?: number | null;
-}
-
-const STORAGE_KEY = 'coach-history';
-
-function loadHistory(): CoachAnalysis[] {
-  try {
-    return JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]');
-  } catch { return []; }
-}
-
-function saveHistory(h: CoachAnalysis[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(h.slice(0, 10)));
-}
-
-const statusConfig = {
-  progress: { border: 'border-[hsl(var(--success))]', bg: 'bg-[hsl(var(--success)/0.1)]', label: 'Progreso' },
-  plateau: { border: 'border-[hsl(var(--warning))]', bg: 'bg-[hsl(var(--warning)/0.1)]', label: 'Meseta' },
-  overtraining: { border: 'border-destructive', bg: 'bg-destructive/10', label: 'Sobreentrenamiento' },
-};
+import { streamCoachChat, type ChatMsg } from '@/lib/stream-chat';
+import ReactMarkdown from 'react-markdown';
 
 export default function Coach() {
+  const [messages, setMessages] = useState<ChatMsg[]>([]);
+  const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
-  const [current, setCurrent] = useState<CoachAnalysis | null>(null);
-  const [history, setHistory] = useState<CoachAnalysis[]>(loadHistory);
+  const [streaming, setStreaming] = useState(false);
+  const [coachDataRef, setCoachDataRef] = useState<any>(null);
+  const [initializing, setInitializing] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
   const { toast } = useToast();
 
-  const consult = async () => {
-    setLoading(true);
-    try {
-      const coachData = await getCoachData();
+  const scrollToBottom = useCallback(() => {
+    setTimeout(() => {
+      scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+    }, 50);
+  }, []);
 
-      if (!coachData.exercises.length) {
-        toast({ title: 'Sin datos suficientes', description: 'Necesitas al menos 2 sesiones con ejercicios de peso para consultar al Coach.', variant: 'destructive' });
-        setLoading(false);
+  useEffect(() => { scrollToBottom(); }, [messages, scrollToBottom]);
+
+  const startConsultation = async () => {
+    setInitializing(true);
+    try {
+      const data = await getCoachData();
+      if (!data.exercises.length && !data.weeklyMuscleSets.length) {
+        toast({ title: 'Sin datos suficientes', description: 'Necesitas al menos algunas sesiones para consultar al Coach.', variant: 'destructive' });
+        setInitializing(false);
         return;
       }
+      setCoachDataRef(data);
 
-      const { data, error } = await supabase.functions.invoke('ai-coach', {
-        body: { coachData },
+      // Start streaming initial analysis
+      setStreaming(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      let assistantContent = '';
+      const initialMsg: ChatMsg = { role: 'user', content: 'Analiza mi entrenamiento', isInitial: true };
+
+      setMessages([initialMsg]);
+
+      await streamCoachChat({
+        messages: [initialMsg],
+        coachData: data,
+        signal: controller.signal,
+        onDelta: (chunk) => {
+          assistantContent += chunk;
+          setMessages(prev => {
+            const last = prev[prev.length - 1];
+            if (last?.role === 'assistant') {
+              return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m);
+            }
+            return [...prev, { role: 'assistant', content: assistantContent }];
+          });
+          scrollToBottom();
+        },
+        onDone: () => { setStreaming(false); },
+        onError: (err) => {
+          toast({ title: 'Error', description: err, variant: 'destructive' });
+          setStreaming(false);
+        },
       });
-
-      if (error) throw error;
-      if (data?.error) throw new Error(data.error);
-
-      const analysis: CoachAnalysis = {
-        ...data,
-        timestamp: new Date().toISOString(),
-        weeklyAvgRPE: coachData.weeklyAvgRPE,
-        last3SessionsAvgRPE: coachData.last3SessionsAvgRPE,
-      };
-
-      setCurrent(analysis);
-      const updated = [analysis, ...history].slice(0, 10);
-      setHistory(updated);
-      saveHistory(updated);
     } catch (e: any) {
-      console.error('Coach error:', e);
-      toast({ title: 'Error', description: e?.message ?? 'No se pudo consultar al Coach', variant: 'destructive' });
+      toast({ title: 'Error', description: e?.message ?? 'Error al cargar datos', variant: 'destructive' });
     } finally {
-      setLoading(false);
+      setInitializing(false);
+      setStreaming(false);
     }
   };
 
-  const cfg = current ? statusConfig[current.status] ?? statusConfig.progress : null;
+  const sendMessage = async () => {
+    const text = input.trim();
+    if (!text || streaming) return;
+    setInput('');
+
+    const userMsg: ChatMsg = { role: 'user', content: text };
+    const updatedMessages = [...messages, userMsg];
+    setMessages(updatedMessages);
+    setStreaming(true);
+    scrollToBottom();
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+    let assistantContent = '';
+
+    await streamCoachChat({
+      messages: updatedMessages,
+      coachData: coachDataRef, // always send context
+      signal: controller.signal,
+      onDelta: (chunk) => {
+        assistantContent += chunk;
+        setMessages(prev => {
+          const last = prev[prev.length - 1];
+          if (last?.role === 'assistant') {
+            return prev.map((m, i) => i === prev.length - 1 ? { ...m, content: assistantContent } : m);
+          }
+          return [...prev, { role: 'assistant', content: assistantContent }];
+        });
+        scrollToBottom();
+      },
+      onDone: () => { setStreaming(false); },
+      onError: (err) => {
+        toast({ title: 'Error', description: err, variant: 'destructive' });
+        setStreaming(false);
+      },
+    });
+  };
+
+  const resetChat = () => {
+    abortRef.current?.abort();
+    setMessages([]);
+    setCoachDataRef(null);
+    setStreaming(false);
+    setInput('');
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  };
+
+  const hasStarted = messages.length > 0;
 
   return (
-    <div className="px-4 py-6 max-w-lg mx-auto space-y-6">
+    <div className="flex flex-col h-[calc(100vh-3.5rem)] max-w-lg mx-auto">
       {/* Header */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 px-4 py-3 border-b border-border">
         <Link to="/">
           <Button variant="ghost" size="icon"><ArrowLeft className="h-5 w-5" /></Button>
         </Link>
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Brain className="h-6 w-6 text-primary" /> Coach IA
+        <div className="flex-1">
+          <h1 className="text-lg font-bold flex items-center gap-2">
+            <Brain className="h-5 w-5 text-primary" /> Coach IA
           </h1>
-          <p className="text-sm text-muted-foreground">Inteligencia de entrenamiento personalizada</p>
+          <p className="text-xs text-muted-foreground">Análisis exhaustivo con IA</p>
         </div>
+        {hasStarted && (
+          <Button variant="ghost" size="icon" onClick={resetChat} title="Nueva consulta">
+            <RotateCcw className="h-4 w-4" />
+          </Button>
+        )}
       </div>
 
-      {/* CTA */}
-      <Button onClick={consult} disabled={loading} className="w-full h-14 text-base font-bold gap-2" size="lg">
-        {loading ? <Loader2 className="h-5 w-5 animate-spin" /> : <Brain className="h-5 w-5" />}
-        {loading ? 'Analizando tus datos…' : 'Consultar al Coach'}
-      </Button>
+      {/* Messages area */}
+      <ScrollArea className="flex-1 px-4" ref={scrollRef}>
+        <div className="py-4 space-y-4">
+          {!hasStarted && (
+            <div className="flex flex-col items-center justify-center h-full min-h-[50vh] gap-6">
+              <div className="text-center space-y-2">
+                <Brain className="h-16 w-16 text-primary mx-auto opacity-50" />
+                <h2 className="text-lg font-semibold">Coach IA v2</h2>
+                <p className="text-sm text-muted-foreground max-w-xs">
+                  Análisis completo de volumen, fatiga, periodización, composición corporal, desequilibrios y más.
+                </p>
+              </div>
+              <Button
+                onClick={startConsultation}
+                disabled={initializing}
+                className="h-14 px-8 text-base font-bold gap-2"
+                size="lg"
+              >
+                {initializing ? <Loader2 className="h-5 w-5 animate-spin" /> : <Brain className="h-5 w-5" />}
+                {initializing ? 'Cargando datos…' : 'Iniciar consulta'}
+              </Button>
+            </div>
+          )}
 
-      {/* Loading skeleton */}
-      {loading && !current && (
-        <div className="space-y-4">
-          {[1, 2, 3].map(i => (
-            <Card key={i}><CardContent className="p-4 space-y-2">
-              <Skeleton className="h-5 w-32" />
-              <Skeleton className="h-4 w-full" />
-              <Skeleton className="h-4 w-3/4" />
-            </CardContent></Card>
+          {messages.filter(m => !m.isInitial).map((msg, i) => (
+            <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+              <div
+                className={`max-w-[90%] rounded-2xl px-4 py-3 text-sm ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-primary-foreground rounded-br-md'
+                    : 'bg-muted text-foreground rounded-bl-md'
+                }`}
+              >
+                {msg.role === 'assistant' ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                    <ReactMarkdown>{msg.content}</ReactMarkdown>
+                  </div>
+                ) : (
+                  <p className="whitespace-pre-wrap">{msg.content}</p>
+                )}
+              </div>
+            </div>
           ))}
-        </div>
-      )}
 
-      {/* Results */}
-      {current && !loading && (
-        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
-          {/* Achievement */}
-          <Card className={`border-2 ${statusConfig.progress.border}`}>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Trophy className="h-5 w-5 text-[hsl(var(--success))]" /> Logro de la semana
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <p className="text-sm text-foreground">{current.achievement}</p>
-            </CardContent>
-          </Card>
-
-          {/* Alert */}
-          <Card className={`border-2 ${current.status === 'plateau' || current.status === 'overtraining' ? statusConfig[current.status].border : 'border-border'}`}>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-[hsl(var(--warning))]" /> Alerta de mejora
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <p className="text-sm text-foreground">{current.alert}</p>
-            </CardContent>
-          </Card>
-
-          {/* Advice */}
-          <Card className={`border-2 ${current.status === 'overtraining' ? 'border-destructive' : statusConfig.progress.border}`}>
-            <CardHeader className="pb-2 pt-4 px-4">
-              <CardTitle className="text-base flex items-center gap-2">
-                <Lightbulb className="h-5 w-5 text-primary" /> Consejo personalizado
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="px-4 pb-4">
-              <p className="text-sm text-foreground">{current.advice}</p>
-            </CardContent>
-          </Card>
-
-          {/* RPE Fatigue Summary */}
-          {(current.weeklyAvgRPE != null || current.last3SessionsAvgRPE != null) && (
-            <Card className="border border-border">
-              <CardContent className="p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <Activity className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-bold">Semáforo de Fatiga</span>
+          {streaming && messages[messages.length - 1]?.role !== 'assistant' && (
+            <div className="flex justify-start">
+              <div className="bg-muted rounded-2xl rounded-bl-md px-4 py-3">
+                <div className="flex gap-1">
+                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:0ms]" />
+                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:150ms]" />
+                  <span className="w-2 h-2 bg-muted-foreground/50 rounded-full animate-bounce [animation-delay:300ms]" />
                 </div>
-                <div className="space-y-2">
-                  {current.weeklyAvgRPE != null && (() => {
-                    const badge = getRPEBadge(Math.round(current.weeklyAvgRPE!));
-                    return (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">RPE medio semanal</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm">{current.weeklyAvgRPE}</span>
-                          {badge && <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 border ${badge.className}`}>{badge.label}</Badge>}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  {current.last3SessionsAvgRPE != null && (() => {
-                    const badge = getRPEBadge(Math.round(current.last3SessionsAvgRPE!));
-                    return (
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-muted-foreground">RPE medio (últimos 3)</span>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-sm">{current.last3SessionsAvgRPE}</span>
-                          {badge && <Badge variant="outline" className={`text-[9px] font-bold px-1.5 py-0 h-4 border ${badge.className}`}>{badge.label}</Badge>}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
-              </CardContent>
-            </Card>
+              </div>
+            </div>
           )}
         </div>
-      )}
+      </ScrollArea>
 
-      {/* History */}
-      {history.length > 0 && !loading && (
-        <div className="space-y-3 pt-2">
-          <h2 className="text-sm font-semibold text-muted-foreground flex items-center gap-1.5">
-            <Clock className="h-4 w-4" /> Consultas anteriores
-          </h2>
-          {history
-            .filter(h => h.timestamp !== current?.timestamp)
-            .slice(0, 5)
-            .map((h, i) => {
-              const c = statusConfig[h.status] ?? statusConfig.progress;
-              return (
-                <Card key={i} className={`border ${c.border} cursor-pointer`} onClick={() => setCurrent(h)}>
-                  <CardContent className="p-3">
-                    <div className="flex items-center justify-between mb-1">
-                      <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${c.bg} text-foreground`}>{c.label}</span>
-                      <span className="text-xs text-muted-foreground">
-                        {format(new Date(h.timestamp), "d MMM, HH:mm", { locale: es })}
-                      </span>
-                    </div>
-                    <p className="text-xs text-muted-foreground line-clamp-2">{h.achievement}</p>
-                  </CardContent>
-                </Card>
-              );
-            })}
+      {/* Input area */}
+      {hasStarted && (
+        <div className="border-t border-border p-3">
+          <div className="flex gap-2 items-end">
+            <Textarea
+              ref={inputRef}
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder="Pregunta al Coach... (ej: ¿por qué estoy estancado en press banca?)"
+              className="min-h-[44px] max-h-[120px] resize-none text-sm"
+              rows={1}
+              disabled={streaming}
+            />
+            <Button
+              size="icon"
+              onClick={sendMessage}
+              disabled={!input.trim() || streaming}
+              className="shrink-0 h-11 w-11"
+            >
+              {streaming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            </Button>
+          </div>
         </div>
       )}
     </div>
