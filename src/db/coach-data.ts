@@ -101,6 +101,46 @@ export interface ProfileData {
   heightCm: number | null;
 }
 
+export interface ProgressionRate {
+  exerciseName: string;
+  pctPerWeek: number; // linear slope as %/week
+  dataPoints: number;
+}
+
+export interface SessionTonnage {
+  date: string;
+  tonnage: number; // Σ(weight × reps)
+}
+
+export interface ExerciseVariety {
+  muscleName: string;
+  distinctExercises: number;
+}
+
+export interface RPEByExercise {
+  exerciseName: string;
+  avgRPE: number;
+  setCount: number;
+}
+
+export interface RelativeStrength {
+  exerciseName: string;
+  ratio: number; // 1RM / bodyWeight
+  rm: number;
+}
+
+export interface MeasurementTrends {
+  chest: { date: string; cm: number }[];
+  arm: { date: string; cm: number }[];
+  thigh: { date: string; cm: number }[];
+  waist: { date: string; cm: number }[];
+}
+
+export interface AvailableRoutine {
+  name: string;
+  goal: string | null;
+}
+
 export interface CoachData {
   exercises: ExerciseTrend[];
   weeklyAvgRPE: number | null;
@@ -121,6 +161,17 @@ export interface CoachData {
   recentPRs: RecentPR[];
   pushPullRatio: number | null;
   profile: ProfileData;
+  // v3 fields
+  progressionRate: ProgressionRate[];
+  sessionTonnage: SessionTonnage[];
+  exerciseVariety: ExerciseVariety[];
+  programAdherence: number | null; // 0-100%
+  trainingDayDistribution: number[]; // [Mon..Sun] counts last 28d
+  relativeStrength: RelativeStrength[];
+  rpeByExercise: RPEByExercise[];
+  recentSessionNotes: string[];
+  measurementTrends: MeasurementTrends;
+  availableRoutines: AvailableRoutine[];
 }
 
 // ============ Push/Pull classification by muscle group ============
