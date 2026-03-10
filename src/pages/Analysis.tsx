@@ -14,6 +14,7 @@ import { ComparisonRow } from '@/components/ComparisonRow';
 import { Progress } from '@/components/ui/progress';
 import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock, Ruler } from 'lucide-react';
 import { BodyEvolutionPanel } from '@/components/BodyEvolutionPanel';
