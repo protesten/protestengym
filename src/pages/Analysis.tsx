@@ -196,6 +196,19 @@ export default function Analysis() {
               </div>
             </div>
           )}
+          {selectedExId && history.length > 0 && (
+            <AIInsightCard
+              context="exercise_analysis"
+              compact
+              data={{
+                exerciseName: selectedEx?.name,
+                trackingType: selectedEx?.tracking_type,
+                history: history.slice(0, 10).map(h => ({ date: h.date, metric: h.totalMetric, sets: h.sets.length })),
+                comparisons: exComps,
+              }}
+              cacheKey={`ex-${selectedExId}`}
+            />
+          )}
           {!selectedExId && <p className="text-center text-muted-foreground text-sm py-8">Selecciona un ejercicio</p>}
         </TabsContent>
 
