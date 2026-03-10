@@ -117,16 +117,16 @@ export default function Analysis() {
         <DateRangeSelector value={dateRange} onChange={setDateRange} />
       </div>
 
-      <Tabs defaultValue="exercise">
+      <Tabs defaultValue={feat.analysis_exercise ? 'exercise' : feat.analysis_muscle ? 'muscle' : 'volume'}>
         <TabsList className="w-full grid grid-cols-4 h-auto gap-1 bg-secondary/50 rounded-xl p-1">
-          <TabsTrigger value="exercise" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Ejercicio</TabsTrigger>
-          <TabsTrigger value="muscle" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Músculo</TabsTrigger>
-          <TabsTrigger value="volume" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Volumen</TabsTrigger>
-          <TabsTrigger value="1rm" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>
-          <TabsTrigger value="prs" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>
-          <TabsTrigger value="body" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Cuerpo</TabsTrigger>
-          <TabsTrigger value="relative" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">F. Relativa</TabsTrigger>
-          <TabsTrigger value="summary" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>
+          {feat.analysis_exercise && <TabsTrigger value="exercise" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Ejercicio</TabsTrigger>}
+          {feat.analysis_muscle && <TabsTrigger value="muscle" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Músculo</TabsTrigger>}
+          {feat.analysis_volume && <TabsTrigger value="volume" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Volumen</TabsTrigger>}
+          {feat.analysis_1rm && <TabsTrigger value="1rm" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">1RM</TabsTrigger>}
+          {feat.analysis_prs && <TabsTrigger value="prs" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">PRs</TabsTrigger>}
+          {feat.analysis_body && <TabsTrigger value="body" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Cuerpo</TabsTrigger>}
+          {feat.analysis_relative && <TabsTrigger value="relative" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">F. Relativa</TabsTrigger>}
+          {feat.analysis_summary && <TabsTrigger value="summary" className="text-xs font-semibold rounded-lg data-[state=active]:bg-card data-[state=active]:text-foreground">Resumen</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="exercise" className="space-y-4 mt-4">
