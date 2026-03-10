@@ -1,40 +1,47 @@
 
 
-## Plan: Drop Sets, Repeticiones Parciales y Corrección de Ejercicios por Tiempo
+## Plan: Corrección de 4 problemas de seguridad restantes
 
-### 1. Nuevos tipos de serie: Drop Set y Parcial
+### 1. HTML Injection en notificación admin (edge function)
+**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
 
-**Migración SQL**: Añadir dos valores al enum `set_type`:
+Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
+
+### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
+**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
+
+**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+
 ```sql
-ALTER TYPE public.set_type ADD VALUE 'drop_set';
-ALTER TYPE public.set_type ADD VALUE 'partial';
+CREATE OR REPLACE FUNCTION public.is_approved_user()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND is_approved = true
+  );
+$$;
 ```
 
-**`src/lib/constants.ts`**: Actualizar `SetType`, `SET_TYPE_LABELS` y `PlannedSet`:
-- `SetType` → añadir `'drop_set' | 'partial'`
-- `SET_TYPE_LABELS` → `drop_set: 'Drop Set'`, `partial: 'Parcial'`
+Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
 
-**`src/pages/SessionDetail.tsx`**: Actualizar `SET_TYPE_CHIPS` y `SET_TYPE_ORDER`:
-- `drop_set: { label: 'D', color: 'bg-purple-400/20 text-purple-400' }`
-- `partial: { label: 'P', color: 'bg-yellow-400/20 text-yellow-400' }`
-- Añadir ambos al array de ciclo
+Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
 
-**`src/pages/RoutineDetail.tsx`**: Los selects de `PlannedSetRow` ya usan `SET_TYPE_LABELS` dinámicamente, así que se actualizarán automáticamente.
+### 3. Error messages internos expuestos (3 edge functions)
+**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
 
-### 2. Corrección de ejercicios por tiempo en rutinas
+Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
 
-El problema está en `PlannedSetRow` (RoutineDetail): cuando el `trackingType` es `time_only`, los inputs de tiempo se muestran correctamente pero la fila se desborda horizontalmente por tener demasiados elementos en una línea (set type select + RPE select + time inputs + delete button).
+### 4. Leaked password protection
+Activar mediante la herramienta de configuración de autenticación.
 
-**Solución**: Reorganizar `PlannedSetRow` para que en ejercicios de tiempo/distancia use un layout de 2 filas (wrap) en lugar de una sola línea. Aplicar `flex-wrap` y ajustar anchos para que todo quepa en móvil.
-
-También verificar que `getDefaultPlannedSet('time_only')` genera valores correctos (ya lo hace: `min_time_seconds: 30, max_time_seconds: 60`).
-
-### Archivos a modificar
+### Archivos afectados
 
 | Archivo | Cambio |
 |---|---|
-| Migración SQL | `ALTER TYPE set_type ADD VALUE 'drop_set'` y `'partial'` |
-| `src/lib/constants.ts` | Ampliar `SetType` y `SET_TYPE_LABELS` |
-| `src/pages/SessionDetail.tsx` | Añadir chips para drop_set y partial |
-| `src/pages/RoutineDetail.tsx` | Aplicar `flex-wrap` en `PlannedSetRow` para mejorar layout en móvil |
+| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
+| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
+| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
+| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
+| Auth config | Leaked password protection |
 

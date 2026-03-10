@@ -28,7 +28,7 @@ function getDefaultPlannedSet(trackingType: TrackingType): PlannedSet {
 
 function PlannedSetRow({ ps, index, trackingType, onChange, onDelete }: { ps: PlannedSet; index: number; trackingType: TrackingType; onChange: (ps: PlannedSet) => void; onDelete: () => void }) {
   return (
-    <div className="flex items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/30">
+    <div className="flex flex-wrap items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/30">
       <span className="text-xs text-muted-foreground w-6 shrink-0 font-bold">S{index + 1}</span>
       <Select value={ps.set_type} onValueChange={v => onChange({ ...ps, set_type: v as SetType })}>
         <SelectTrigger className="w-24 h-7 text-xs rounded-md bg-card border-border"><SelectValue /></SelectTrigger>
@@ -40,33 +40,33 @@ function PlannedSetRow({ ps, index, trackingType, onChange, onDelete }: { ps: Pl
       </Select>
 
       {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
-        <>
+        <div className="flex items-center gap-1.5">
           <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-xs text-muted-foreground">-</span>
           <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-[11px] text-muted-foreground">reps</span>
-        </>
+        </div>
       )}
 
       {(trackingType === 'time_only' || trackingType === 'distance_time') && (
-        <>
+        <div className="flex items-center gap-1.5">
           <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-xs text-muted-foreground">-</span>
           <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-[11px] text-muted-foreground">seg</span>
-        </>
+        </div>
       )}
 
       {trackingType === 'distance_time' && (
-        <>
+        <div className="flex items-center gap-1.5">
           <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-xs text-muted-foreground">-</span>
           <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-[11px] text-muted-foreground">m</span>
-        </>
+        </div>
       )}
 
-      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
+      <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 ml-auto" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
     </div>
   );
 }
