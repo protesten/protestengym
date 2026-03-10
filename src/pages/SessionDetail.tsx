@@ -87,6 +87,8 @@ function SetTypeChip({ type, onChange }: { type: SetType; onChange: (t: SetType)
 /* ── Set row: ultra compact ── */
 function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: { set: WorkoutSet; trackingType: TrackingType; plannedSet?: PlannedSet; prevSet?: WorkoutSet; onUpdate: (s: Partial<WorkoutSet>) => void; onDelete: () => void }) {
   const rpeValue = set.rpe as number | null;
+  const isDropSet = set.set_type === 'drop_set';
+  const isPartial = set.set_type === 'partial';
 
   const repsPlaceholder = plannedSet && plannedSet.min_reps != null && plannedSet.max_reps != null
     ? `${plannedSet.min_reps}-${plannedSet.max_reps}`
@@ -120,42 +122,64 @@ function SetRow({ set, trackingType, plannedSet, prevSet, onUpdate, onDelete }: 
     }
     return null;
   };
-  const cmp = getComparison();
+  const cmp = isDropSet || isPartial ? null : getComparison();
   const borderClass = cmp === 'up' ? 'border-l-2 border-l-green-400' : cmp === 'down' ? 'border-l-2 border-l-red-400' : cmp === 'equal' ? 'border-l-2 border-l-muted-foreground/30' : '';
 
+  // Drop set info from planned set
+  const dropInfo = plannedSet?.set_type === 'drop_set' ? `${plannedSet.num_drops ?? 3}×-${plannedSet.weight_reduction_pct ?? 20}%` : null;
+
   return (
-    <div className={cn("flex items-center gap-1.5 py-1 px-1.5 rounded-lg bg-secondary/20", borderClass)}>
+    <div className={cn("flex flex-wrap items-center gap-1.5 py-1 px-1.5 rounded-lg bg-secondary/20", borderClass)}>
       <SetTypeChip type={set.set_type as SetType} onChange={v => onUpdate({ set_type: v })} />
 
-      {trackingType === 'weight_reps' && (
+      {isDropSet ? (
         <>
           <NumericInput value={set.weight} placeholder="kg" className="w-[60px] h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
-          <span className="text-muted-foreground/40 text-xs">×</span>
-          <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-[52px] h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+          <NumericInput value={set.reps} placeholder="drops" className="w-[52px] h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+          {dropInfo && <span className="text-[10px] text-purple-400 font-medium">{dropInfo}</span>}
+          <span className="text-[10px] text-muted-foreground">al fallo</span>
         </>
-      )}
-      {trackingType === 'reps_only' && (
-        <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
-      )}
-      {trackingType === 'time_only' && (
-        <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
-      )}
-      {trackingType === 'distance_time' && (
+      ) : isPartial ? (
         <>
-          <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
-          <NumericInput value={set.distance_meters} placeholder={distancePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
+          {trackingType === 'weight_reps' && (
+            <NumericInput value={set.weight} placeholder="kg" className="w-[60px] h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
+          )}
+          <NumericInput value={set.reps} placeholder="reps" className="w-[52px] h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+          <span className="text-[10px] text-yellow-400 font-medium">al fallo</span>
+        </>
+      ) : (
+        <>
+          {trackingType === 'weight_reps' && (
+            <>
+              <NumericInput value={set.weight} placeholder="kg" className="w-[60px] h-8 text-xs" onSave={v => onUpdate({ weight: v })} />
+              <span className="text-muted-foreground/40 text-xs">×</span>
+              <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-[52px] h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+            </>
+          )}
+          {trackingType === 'reps_only' && (
+            <NumericInput value={set.reps} placeholder={repsPlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ reps: v })} />
+          )}
+          {trackingType === 'time_only' && (
+            <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-20 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
+          )}
+          {trackingType === 'distance_time' && (
+            <>
+              <NumericInput value={set.duration_seconds} placeholder={timePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ duration_seconds: v })} />
+              <NumericInput value={set.distance_meters} placeholder={distancePlaceholder} className="w-16 h-8 text-xs" onSave={v => onUpdate({ distance_meters: v })} />
+            </>
+          )}
+
+          <div className="flex items-center gap-1">
+            <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null })}>
+              <SelectTrigger className="w-16 h-8 text-xs rounded-md bg-card border-border">
+                <SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} />
+              </SelectTrigger>
+              <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>@{r}</SelectItem>)}</SelectContent>
+            </Select>
+            <RPEBadge rpe={rpeValue} />
+          </div>
         </>
       )}
-
-      <div className="flex items-center gap-1">
-        <Select value={rpeValue?.toString() ?? ''} onValueChange={v => onUpdate({ rpe: v ? Number(v) : null })}>
-          <SelectTrigger className="w-16 h-8 text-xs rounded-md bg-card border-border">
-            <SelectValue placeholder={plannedSet?.rpe != null ? `@${plannedSet.rpe}` : 'RPE'} />
-          </SelectTrigger>
-          <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>@{r}</SelectItem>)}</SelectContent>
-        </Select>
-        <RPEBadge rpe={rpeValue} />
-      </div>
 
       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 ml-auto" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive/70" /></Button>
     </div>
