@@ -1,47 +1,32 @@
 
 
-## Plan: Corrección de 4 problemas de seguridad restantes
+## Fix: Program day tracking logic in TodayRoutineSuggestion
 
-### 1. HTML Injection en notificación admin (edge function)
-**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
+### Problem
+The component uses `currentWeek = floor(daysSinceStart / 7) + 1` to pick which training day to show. But `program_weeks.week_number` represents sequential **training days** (1, 2, 3, 4), not calendar weeks. So yesterday (day 0 diff) and today (day 1 diff) both produce `currentWeek = 1`, showing day 1 forever until a full calendar week passes.
 
-Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
+### Solution
+Replace the calendar-week calculation with a **completion-based approach**:
 
-### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
-**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
+1. Fetch all `program_weeks` for the active program, ordered by `week_number` and `order_index`
+2. Fetch all completed sessions since the program's `start_date` whose `routine_id` matches any program routine
+3. For each training day, check if ALL its routines have been completed in any past session (not just today)
+4. The current training day = first day where not all routines are completed
+5. If all days are done, show "all completed"
 
-**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+This correctly advances the day whenever the user finishes all routines for that day, regardless of calendar time.
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_approved_user()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND is_approved = true
-  );
-$$;
-```
+### File changed
+`src/components/TodayRoutineSuggestion.tsx` — rewrite the `queryFn` logic:
+- Remove `diffDays / 7` calculation
+- Query completed sessions since `start_date` with matching routine IDs
+- Walk through training days in order, find the first incomplete one
+- Filter out routines already completed **today** (to handle partial completion within a day)
+- Show pending routines for that training day
 
-Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
-
-Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
-
-### 3. Error messages internos expuestos (3 edge functions)
-**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
-
-Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
-
-### 4. Leaked password protection
-Activar mediante la herramienta de configuración de autenticación.
-
-### Archivos afectados
-
-| Archivo | Cambio |
-|---|---|
-| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
-| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
-| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
-| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
-| Auth config | Leaked password protection |
+### Edge cases handled
+- Multiple routines per day (e.g., "Calentamiento + Bloque2-Piernas1" on day 1): both must be completed to advance
+- Same routine assigned to multiple days: match by counting completions vs occurrences
+- Program not started yet (start_date in future): show nothing
+- All days completed: show celebration message
 
