@@ -5,6 +5,7 @@ import { getAllSessionSummaries, type SessionSummary } from '@/db/calculations';
 import { Button } from '@/components/ui/button';
 import { StreakCard } from '@/components/StreakCard';
 import { TodayRoutineSuggestion } from '@/components/TodayRoutineSuggestion';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { Play, Zap, Calendar, TrendingUp, Dumbbell, Trash2, CalendarDays, Pencil, Clock } from 'lucide-react';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
