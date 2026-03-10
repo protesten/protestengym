@@ -11,6 +11,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteSession as deleteSessionApi } from '@/lib/api';
 import { useState, useEffect, useMemo } from 'react';
+import { getAppFeatures } from '@/lib/ai-insights';
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -25,17 +26,17 @@ export default function Index() {
     getAllSessionSummaries().then(setSummaries);
   }, []);
 
+  const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
+
   const displayName = profile?.display_name || 'Atleta';
   const firstName = displayName.split(' ')[0];
 
-  // Routine name map for recent sessions
   const routineNameMap = useMemo(() => {
     const map = new Map<string, string>();
     routines?.forEach(r => map.set(r.id, r.name));
     return map;
   }, [routines]);
 
-  // Weekly activity
   const now = new Date();
   const startOfWeek = new Date(now);
   const day = startOfWeek.getDay();
@@ -59,7 +60,6 @@ export default function Index() {
   const weekCount = weekSessions.length;
   const totalSessions = sessions?.length ?? 0;
 
-  // Recent volume
   const last7 = summaries.filter(s => {
     const d = new Date(s.date);
     const diff = now.getTime() - d.getTime();
@@ -75,7 +75,7 @@ export default function Index() {
         <h1 className="text-2xl font-black tracking-tight">¡Hola, {firstName}! 💪</h1>
       </div>
 
-      {/* AI Daily Briefing — moved to top */}
+      {/* AI Daily Briefing */}
       <AIInsightCard
         context="home_summary"
         data={{
@@ -90,48 +90,52 @@ export default function Index() {
       />
 
       {/* Quick Stats */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="rounded-xl bg-card border border-border p-3 text-center">
-          <div className="text-2xl font-black text-primary">{weekCount}</div>
-          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Esta semana</p>
+      {feat.home_quick_stats && (
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl bg-card border border-border p-3 text-center">
+            <div className="text-2xl font-black text-primary">{weekCount}</div>
+            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Esta semana</p>
+          </div>
+          <div className="rounded-xl bg-card border border-border p-3 text-center">
+            <div className="text-2xl font-black text-foreground">{totalSessions}</div>
+            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Total sesiones</p>
+          </div>
+          <div className="rounded-xl bg-card border border-border p-3 text-center">
+            <div className="text-2xl font-black text-foreground">{weekVolume > 0 ? `${(weekVolume / 1000).toFixed(1)}k` : '0'}</div>
+            <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Vol. semanal</p>
+          </div>
         </div>
-        <div className="rounded-xl bg-card border border-border p-3 text-center">
-          <div className="text-2xl font-black text-foreground">{totalSessions}</div>
-          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Total sesiones</p>
-        </div>
-        <div className="rounded-xl bg-card border border-border p-3 text-center">
-          <div className="text-2xl font-black text-foreground">{weekVolume > 0 ? `${(weekVolume / 1000).toFixed(1)}k` : '0'}</div>
-          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Vol. semanal</p>
-        </div>
-      </div>
+      )}
 
       {/* Weekly Activity */}
-      <div className="rounded-xl bg-card border border-border p-4">
-        <div className="flex items-center gap-2 mb-3">
-          <Calendar className="h-4 w-4 text-primary" />
-          <h3 className="text-sm font-bold">Actividad Semanal</h3>
-        </div>
-        <div className="flex justify-between">
-          {weekDays.map((d, i) => (
-            <div key={i} className="flex flex-col items-center gap-1.5">
-              <div
-                className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
-                  d.active
-                    ? 'gradient-primary text-primary-foreground glow-primary'
-                    : d.isToday
-                    ? 'border-2 border-primary text-primary'
-                    : 'bg-secondary text-muted-foreground'
-                }`}
-              >
-                {d.label}
+      {feat.home_weekly_activity && (
+        <div className="rounded-xl bg-card border border-border p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <Calendar className="h-4 w-4 text-primary" />
+            <h3 className="text-sm font-bold">Actividad Semanal</h3>
+          </div>
+          <div className="flex justify-between">
+            {weekDays.map((d, i) => (
+              <div key={i} className="flex flex-col items-center gap-1.5">
+                <div
+                  className={`w-9 h-9 rounded-full flex items-center justify-center text-xs font-bold transition-all ${
+                    d.active
+                      ? 'gradient-primary text-primary-foreground glow-primary'
+                      : d.isToday
+                      ? 'border-2 border-primary text-primary'
+                      : 'bg-secondary text-muted-foreground'
+                  }`}
+                >
+                  {d.label}
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Today's Routine Suggestion */}
-      <TodayRoutineSuggestion />
+      {feat.home_today_routine && <TodayRoutineSuggestion />}
 
       {/* Quick Start */}
       <Link to="/session/new">
@@ -142,28 +146,30 @@ export default function Index() {
       </Link>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3">
-        <Link to="/routines">
-          <div className="rounded-xl bg-card border border-border p-4 hover:border-primary/30 transition-colors">
-            <Zap className="h-5 w-5 text-primary mb-2" />
-            <h3 className="text-sm font-bold">Mis Rutinas</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">{routines?.length ?? 0} rutinas</p>
-          </div>
-        </Link>
-        <Link to="/analysis">
-          <div className="rounded-xl bg-card border border-border p-4 hover:border-primary/30 transition-colors">
-            <TrendingUp className="h-5 w-5 text-primary mb-2" />
-            <h3 className="text-sm font-bold">Análisis</h3>
-            <p className="text-xs text-muted-foreground mt-0.5">Tu progreso</p>
-          </div>
-        </Link>
-      </div>
+      {feat.home_quick_actions && (
+        <div className="grid grid-cols-2 gap-3">
+          <Link to="/routines">
+            <div className="rounded-xl bg-card border border-border p-4 hover:border-primary/30 transition-colors">
+              <Zap className="h-5 w-5 text-primary mb-2" />
+              <h3 className="text-sm font-bold">Mis Rutinas</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">{routines?.length ?? 0} rutinas</p>
+            </div>
+          </Link>
+          <Link to="/analysis">
+            <div className="rounded-xl bg-card border border-border p-4 hover:border-primary/30 transition-colors">
+              <TrendingUp className="h-5 w-5 text-primary mb-2" />
+              <h3 className="text-sm font-bold">Análisis</h3>
+              <p className="text-xs text-muted-foreground mt-0.5">Tu progreso</p>
+            </div>
+          </Link>
+        </div>
+      )}
 
       {/* Streak Card */}
-      <StreakCard />
+      {feat.home_streak && <StreakCard />}
 
       {/* Recent Sessions */}
-      {sessions && sessions.length > 0 && (
+      {feat.home_recent_sessions && sessions && sessions.length > 0 && (
         <div>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-bold flex items-center gap-2">

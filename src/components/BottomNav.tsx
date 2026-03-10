@@ -1,7 +1,10 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut, Flame, Brain } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { getProfile } from '@/lib/api';
+import { getAppFeatures } from '@/lib/ai-insights';
 
 const mainItems = [
   { to: '/', icon: Home, label: 'Inicio' },
@@ -10,30 +13,37 @@ const mainItems = [
   { to: '/analysis', icon: BarChart3, label: 'Análisis' },
 ];
 
-const moreItems = [
-  { to: '/coach', icon: Brain, label: 'Coach IA' },
-  { to: '/fatigue', icon: Flame, label: 'Fatiga' },
-  { to: '/measurements', icon: Ruler, label: 'Medidas' },
-  { to: '/programs', icon: Calendar, label: 'Programas' },
-  { to: '/calendar', icon: CalendarDays, label: 'Calendario' },
-  { to: '/report', icon: FileText, label: 'Informe' },
-  { to: '/profile', icon: User, label: 'Perfil' },
+const allMoreItems = [
+  { to: '/coach', icon: Brain, label: 'Coach IA', featureKey: 'nav_coach' as const },
+  { to: '/fatigue', icon: Flame, label: 'Fatiga', featureKey: 'nav_fatigue' as const },
+  { to: '/measurements', icon: Ruler, label: 'Medidas', featureKey: 'nav_measurements' as const },
+  { to: '/programs', icon: Calendar, label: 'Programas', featureKey: 'nav_programs' as const },
+  { to: '/calendar', icon: CalendarDays, label: 'Calendario', featureKey: 'nav_calendar' as const },
+  { to: '/report', icon: FileText, label: 'Informe', featureKey: 'nav_report' as const },
+  { to: '/profile', icon: User, label: 'Perfil', featureKey: null },
 ];
 
 export function BottomNav() {
   const { pathname } = useLocation();
   const { signOut } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+
+  const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
+
+  const moreItems = useMemo(() =>
+    allMoreItems.filter(item => item.featureKey === null || feat[item.featureKey]),
+    [feat]
+  );
+
   const moreActive = moreItems.some(({ to }) => pathname === to || (to !== '/' && pathname.startsWith(to)));
 
   return (
     <>
-      {/* Backdrop */}
       {moreOpen && (
         <div className="fixed inset-0 z-40 bg-background/60 backdrop-blur-sm" onClick={() => setMoreOpen(false)} />
       )}
 
-      {/* More menu */}
       {moreOpen && (
         <div className="fixed bottom-16 left-0 right-0 z-50 px-4 pb-2">
           <div className="max-w-lg mx-auto bg-card border border-border rounded-2xl p-3 shadow-lg space-y-1">
@@ -64,7 +74,6 @@ export function BottomNav() {
         </div>
       )}
 
-      {/* Bottom bar */}
       <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80">
         <div className="flex items-center justify-around h-14 max-w-lg mx-auto">
           {mainItems.map(({ to, icon: Icon, label }) => {

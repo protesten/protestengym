@@ -13,6 +13,69 @@ export type InsightContext =
   | 'profile_recommendations'
   | 'new_session_suggestion';
 
+export interface AppFeaturePreferences {
+  // Home
+  home_weekly_activity: boolean;
+  home_quick_stats: boolean;
+  home_streak: boolean;
+  home_today_routine: boolean;
+  home_recent_sessions: boolean;
+  home_quick_actions: boolean;
+  // Analysis tabs
+  analysis_exercise: boolean;
+  analysis_muscle: boolean;
+  analysis_volume: boolean;
+  analysis_1rm: boolean;
+  analysis_prs: boolean;
+  analysis_body: boolean;
+  analysis_relative: boolean;
+  analysis_summary: boolean;
+  // Fatigue
+  fatigue_heatmap: boolean;
+  fatigue_history: boolean;
+  fatigue_critical: boolean;
+  fatigue_overview: boolean;
+  // Nav sections
+  nav_coach: boolean;
+  nav_fatigue: boolean;
+  nav_measurements: boolean;
+  nav_programs: boolean;
+  nav_calendar: boolean;
+  nav_report: boolean;
+}
+
+export const DEFAULT_APP_FEATURES: AppFeaturePreferences = {
+  home_weekly_activity: true,
+  home_quick_stats: true,
+  home_streak: true,
+  home_today_routine: true,
+  home_recent_sessions: true,
+  home_quick_actions: true,
+  analysis_exercise: true,
+  analysis_muscle: true,
+  analysis_volume: true,
+  analysis_1rm: true,
+  analysis_prs: true,
+  analysis_body: true,
+  analysis_relative: true,
+  analysis_summary: true,
+  fatigue_heatmap: true,
+  fatigue_history: true,
+  fatigue_critical: true,
+  fatigue_overview: true,
+  nav_coach: true,
+  nav_fatigue: true,
+  nav_measurements: true,
+  nav_programs: true,
+  nav_calendar: true,
+  nav_report: true,
+};
+
+export function getAppFeatures(profilePreferences: any): AppFeaturePreferences {
+  if (!profilePreferences?.app_features) return { ...DEFAULT_APP_FEATURES };
+  return { ...DEFAULT_APP_FEATURES, ...profilePreferences.app_features };
+}
+
 export interface AIPreferences {
   ai_enabled: boolean;
   ai_tone: 'technical' | 'casual';
