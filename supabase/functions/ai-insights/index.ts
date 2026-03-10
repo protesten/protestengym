@@ -69,6 +69,21 @@ Basándote en la fatiga actual y el programa activo, recomienda qué rutina hace
 Prioriza músculos con fatiga <40% (zona verde). Evita los que están >70% (zona roja).
 Si todos están en zona verde, sigue el programa. Si todos están en rojo, sugiere descanso.
 Máximo 3 frases.`,
+
+  warmup_suggestion: `Eres un coach de fuerza experto diseñando la rampa de calentamiento y aproximación para un ejercicio.
+Basándote en el 1RM estimado del usuario (o peso de trabajo anterior), el objetivo de entrenamiento y el número de series de trabajo planificadas, sugiere:
+1. Series de calentamiento progresivas (peso, reps, RPE) empezando con barra vacía o 40% del peso de trabajo.
+2. Series de aproximación (70-85% del peso de trabajo, pocas reps) para preparar el sistema nervioso.
+3. Justificación breve de por qué esta rampa es óptima.
+
+Formato sugerido:
+- C1: X kg × Y reps @RPE Z
+- C2: X kg × Y reps @RPE Z
+- A1: X kg × Y reps @RPE Z
+- Trabajo: X kg × Y reps @RPE Z
+
+Adapta según el objetivo: Fuerza (más aproximación, menos reps), Hipertrofia (calentamiento eficiente), Resistencia (calentamiento breve).
+Máximo 6 frases incluyendo las series sugeridas.`,
 };
 
 const TONE_MODIFIERS: Record<string, string> = {

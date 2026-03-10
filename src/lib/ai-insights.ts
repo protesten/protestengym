@@ -102,6 +102,7 @@ export const DEFAULT_AI_PREFERENCES: AIPreferences = {
     monthly_report_narrative: true,
     profile_recommendations: true,
     new_session_suggestion: true,
+    warmup_suggestion: true,
   },
   font_size: 'normal',
   theme: 'dark-orange',
