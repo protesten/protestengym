@@ -216,48 +216,50 @@ export default function Fatigue() {
             <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
           )}
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Músculos Críticos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {criticalMuscles.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Todos los músculos están en niveles seguros ✓</p>
-              ) : (
-                <div className="space-y-3">
-                  {criticalMuscles.map(([id, pct]) => {
-                    const hours = estimateRecoveryHours(pct, id, recoveryMap);
-                    return (
-                      <div key={id} className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate">{muscleNames.get(id) ?? `Músculo ${id}`}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-bold" style={{ color: fatigueColor(pct) }}>
-                              {Math.round(pct)}%
-                            </span>
-                            <div className="flex items-center gap-1 text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              <span className="text-[11px]">{hours}h</span>
+          {feat.fatigue_critical && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Músculos Críticos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {criticalMuscles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Todos los músculos están en niveles seguros ✓</p>
+                ) : (
+                  <div className="space-y-3">
+                    {criticalMuscles.map(([id, pct]) => {
+                      const hours = estimateRecoveryHours(pct, id, recoveryMap);
+                      return (
+                        <div key={id} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium truncate">{muscleNames.get(id) ?? `Músculo ${id}`}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-bold" style={{ color: fatigueColor(pct) }}>
+                                {Math.round(pct)}%
+                              </span>
+                              <div className="flex items-center gap-1 text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                <span className="text-[11px]">{hours}h</span>
+                              </div>
                             </div>
                           </div>
+                          <Progress
+                            value={Math.round(pct)}
+                            className="h-1.5"
+                            style={{ ['--progress-color' as any]: fatigueColor(pct) }}
+                          />
                         </div>
-                        <Progress
-                          value={Math.round(pct)}
-                          className="h-1.5"
-                          style={{ ['--progress-color' as any]: fatigueColor(pct) }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          {fatigue.size > 0 && (
+          {feat.fatigue_overview && fatigue.size > 0 && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Resumen General</CardTitle>
