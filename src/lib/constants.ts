@@ -29,6 +29,8 @@ export const SET_TYPE_LABELS: Record<SetType, string> = {
   warmup: 'Calentam.',
   approach: 'Aproxim.',
   work: 'Trabajo',
+  drop_set: 'Drop Set',
+  partial: 'Parcial',
 };
 
 export const RPE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;

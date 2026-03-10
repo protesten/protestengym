@@ -516,7 +516,7 @@ export type Database = {
     }
     Enums: {
       app_role: "admin" | "user"
-      set_type: "warmup" | "approach" | "work"
+      set_type: "warmup" | "approach" | "work" | "drop_set" | "partial"
       tracking_type: "weight_reps" | "reps_only" | "time_only" | "distance_time"
     }
     CompositeTypes: {
@@ -646,7 +646,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["admin", "user"],
-      set_type: ["warmup", "approach", "work"],
+      set_type: ["warmup", "approach", "work", "drop_set", "partial"],
       tracking_type: ["weight_reps", "reps_only", "time_only", "distance_time"],
     },
   },
