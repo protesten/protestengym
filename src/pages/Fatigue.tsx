@@ -23,6 +23,8 @@ import {
 
 export default function Fatigue() {
   const navigate = useNavigate();
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
   const [loading, setLoading] = useState(true);
   const [fatigue, setFatigue] = useState<Map<number, number>>(new Map());
   const [muscleNames, setMuscleNames] = useState<Map<number, string>>(new Map());
