@@ -13,7 +13,13 @@ import { toast } from 'sonner';
 
 const DEFAULT_PLANNED_SET: PlannedSet = { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
 
-function getDefaultPlannedSet(trackingType: TrackingType): PlannedSet {
+function getDefaultPlannedSet(trackingType: TrackingType, setType?: SetType): PlannedSet {
+  if (setType === 'drop_set') {
+    return { set_type: 'drop_set', rpe: null, min_reps: null, max_reps: null, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null, num_drops: 3, weight_reduction_pct: 20 };
+  }
+  if (setType === 'partial') {
+    return { set_type: 'partial', rpe: null, min_reps: null, max_reps: null, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
+  }
   switch (trackingType) {
     case 'time_only':
       return { set_type: 'work', rpe: 8, min_reps: null, max_reps: null, min_time_seconds: 30, max_time_seconds: 60, min_distance_meters: null, max_distance_meters: null };
@@ -27,43 +33,74 @@ function getDefaultPlannedSet(trackingType: TrackingType): PlannedSet {
 }
 
 function PlannedSetRow({ ps, index, trackingType, onChange, onDelete }: { ps: PlannedSet; index: number; trackingType: TrackingType; onChange: (ps: PlannedSet) => void; onDelete: () => void }) {
+  const isDropSet = ps.set_type === 'drop_set';
+  const isPartial = ps.set_type === 'partial';
+
   return (
     <div className="flex flex-wrap items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/30">
       <span className="text-xs text-muted-foreground w-6 shrink-0 font-bold">S{index + 1}</span>
-      <Select value={ps.set_type} onValueChange={v => onChange({ ...ps, set_type: v as SetType })}>
+      <Select value={ps.set_type} onValueChange={v => {
+        const newType = v as SetType;
+        if (newType === 'drop_set') {
+          onChange({ ...ps, set_type: newType, num_drops: ps.num_drops ?? 3, weight_reduction_pct: ps.weight_reduction_pct ?? 20, rpe: null, min_reps: null, max_reps: null });
+        } else if (newType === 'partial') {
+          onChange({ ...ps, set_type: newType, rpe: null, min_reps: null, max_reps: null, num_drops: null, weight_reduction_pct: null });
+        } else {
+          onChange({ ...ps, set_type: newType, num_drops: null, weight_reduction_pct: null });
+        }
+      }}>
         <SelectTrigger className="w-24 h-7 text-xs rounded-md bg-card border-border"><SelectValue /></SelectTrigger>
         <SelectContent>{Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
       </Select>
-      <Select value={ps.rpe?.toString() ?? ''} onValueChange={v => onChange({ ...ps, rpe: v ? Number(v) : null })}>
-        <SelectTrigger className="w-20 h-7 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
-        <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
-      </Select>
 
-      {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
-        <div className="flex items-center gap-1.5">
-          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-xs text-muted-foreground">-</span>
-          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[11px] text-muted-foreground">reps</span>
-        </div>
-      )}
+      {isDropSet ? (
+        <>
+          <div className="flex items-center gap-1.5">
+            <Input type="number" inputMode="numeric" placeholder="3" className="w-12 h-7 text-xs rounded-md bg-card border-border text-center" value={ps.num_drops ?? ''} onChange={e => onChange({ ...ps, num_drops: e.target.value ? Number(e.target.value) : null })} />
+            <span className="text-[11px] text-muted-foreground">drops</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Input type="number" inputMode="numeric" placeholder="20" className="w-12 h-7 text-xs rounded-md bg-card border-border text-center" value={ps.weight_reduction_pct ?? ''} onChange={e => onChange({ ...ps, weight_reduction_pct: e.target.value ? Number(e.target.value) : null })} />
+            <span className="text-[11px] text-muted-foreground">% bajada</span>
+          </div>
+          <span className="text-[10px] text-purple-400 font-medium ml-1">Al fallo</span>
+        </>
+      ) : isPartial ? (
+        <span className="text-[10px] text-yellow-400 font-medium ml-1">Reps parciales al fallo</span>
+      ) : (
+        <>
+          <Select value={ps.rpe?.toString() ?? ''} onValueChange={v => onChange({ ...ps, rpe: v ? Number(v) : null })}>
+            <SelectTrigger className="w-20 h-7 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
+            <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
+          </Select>
 
-      {(trackingType === 'time_only' || trackingType === 'distance_time') && (
-        <div className="flex items-center gap-1.5">
-          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-xs text-muted-foreground">-</span>
-          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[11px] text-muted-foreground">seg</span>
-        </div>
-      )}
+          {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
+            <div className="flex items-center gap-1.5">
+              <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-[11px] text-muted-foreground">reps</span>
+            </div>
+          )}
 
-      {trackingType === 'distance_time' && (
-        <div className="flex items-center gap-1.5">
-          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-xs text-muted-foreground">-</span>
-          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[11px] text-muted-foreground">m</span>
-        </div>
+          {(trackingType === 'time_only' || trackingType === 'distance_time') && (
+            <div className="flex items-center gap-1.5">
+              <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-[11px] text-muted-foreground">seg</span>
+            </div>
+          )}
+
+          {trackingType === 'distance_time' && (
+            <div className="flex items-center gap-1.5">
+              <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-[11px] text-muted-foreground">m</span>
+            </div>
+          )}
+        </>
       )}
 
       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 ml-auto" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
@@ -119,7 +156,7 @@ export default function RoutineDetail() {
     const ex = exercises?.find(e => e.id === exerciseId);
     return (ex?.tracking_type as TrackingType) ?? 'weight_reps';
   };
-  const handleAddPlannedSet = (reId: string, current: PlannedSet[], trackingType: TrackingType) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, getDefaultPlannedSet(trackingType)] }); };
+  const handleAddPlannedSet = (reId: string, current: PlannedSet[], trackingType: TrackingType, setType?: SetType) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, getDefaultPlannedSet(trackingType, setType)] }); };
   const handleUpdatePlannedSet = (reId: string, current: PlannedSet[], index: number, updated: PlannedSet) => { const next = [...current]; next[index] = updated; updatePlannedSetsMutation.mutate({ reId, plannedSets: next }); };
   const handleDeletePlannedSet = (reId: string, current: PlannedSet[], index: number) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: current.filter((_, i) => i !== index) }); };
 
@@ -189,9 +226,17 @@ export default function RoutineDetail() {
                 {plannedSets.map((ps, j) => (
                   <PlannedSetRow key={j} ps={ps} index={j} trackingType={trackingType} onChange={updated => handleUpdatePlannedSet(re.id, plannedSets, j, updated)} onDelete={() => handleDeletePlannedSet(re.id, plannedSets, j)} />
                 ))}
-                <Button variant="outline" size="sm" className="mt-1.5 w-full text-xs h-7 rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType)}>
-                  <Plus className="h-3 w-3 mr-1" />Añadir serie
-                </Button>
+                <div className="flex gap-1.5 mt-1.5">
+                  <Button variant="outline" size="sm" className="flex-1 text-xs h-7 rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType)}>
+                    <Plus className="h-3 w-3 mr-1" />Serie
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7 rounded-lg border-dashed border-purple-400/30 text-purple-400 hover:border-purple-400/50 hover:bg-purple-400/5" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType, 'drop_set')}>
+                    <Plus className="h-3 w-3 mr-1" />Drop
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7 rounded-lg border-dashed border-yellow-400/30 text-yellow-400 hover:border-yellow-400/50 hover:bg-yellow-400/5" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType, 'partial')}>
+                    <Plus className="h-3 w-3 mr-1" />Parcial
+                  </Button>
+                </div>
               </div>
             </div>
           );
