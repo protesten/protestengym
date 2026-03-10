@@ -7,7 +7,6 @@ import { getProfile } from '@/lib/api';
 import ReactMarkdown from 'react-markdown';
 import { toast } from 'sonner';
 
-// In-memory cache to avoid redundant calls within the same session
 const insightCache = new Map<string, string>();
 
 interface AIInsightCardProps {
@@ -22,11 +21,6 @@ interface AIInsightCardProps {
 export function AIInsightCard({ context, data, cacheKey, compact = false, label, autoFetch = false }: AIInsightCardProps) {
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
   const prefs = getAIPreferences(profile?.preferences);
-
-  // Don't render if AI is globally disabled or this specific feature is disabled
-  if (!prefs.ai_enabled || prefs.ai_features[context] === false) {
-    return null;
-  }
 
   const fullKey = `${context}:${cacheKey ?? JSON.stringify(data)}`;
   const cached = insightCache.get(fullKey);
@@ -52,13 +46,17 @@ export function AIInsightCard({ context, data, cacheKey, compact = false, label,
     }
   }, [context, data, fullKey, cooldown, prefs.ai_tone, prefs.ai_mood]);
 
-  // Auto-fetch on first render if autoFetch and no cache
   useState(() => {
     if (autoFetch && !cached) {
       setVisible(true);
       doFetch();
     }
   });
+
+  // Don't render if AI is globally disabled or this specific feature is disabled
+  if (!prefs.ai_enabled || prefs.ai_features[context] === false) {
+    return null;
+  }
 
   if (!visible) {
     return (
@@ -87,27 +85,14 @@ export function AIInsightCard({ context, data, cacheKey, compact = false, label,
           <span className="text-[11px] font-bold text-primary uppercase tracking-wider truncate">Análisis IA</span>
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-primary"
-            onClick={doFetch}
-            disabled={loading || cooldown}
-            title="Regenerar"
-          >
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-primary" onClick={doFetch} disabled={loading || cooldown} title="Regenerar">
             <RefreshCw className={`h-3 w-3 ${loading ? 'animate-spin' : ''}`} />
           </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6 text-muted-foreground hover:text-foreground"
-            onClick={() => { setVisible(false); setInsight(''); }}
-          >
+          <Button variant="ghost" size="icon" className="h-6 w-6 text-muted-foreground hover:text-foreground" onClick={() => { setVisible(false); setInsight(''); }}>
             <X className="h-3 w-3" />
           </Button>
         </div>
       </div>
-
       {loading && !insight ? (
         <div className="flex items-center gap-2 py-2">
           <div className="h-1 w-12 bg-primary/30 rounded-full overflow-hidden">
