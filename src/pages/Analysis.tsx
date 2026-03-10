@@ -39,6 +39,8 @@ function DeltaIndicator({ current, previous }: { current: number; previous: numb
 
 export default function Analysis() {
   const { data: exercises } = useQuery({ queryKey: ['allExercises'], queryFn: getAllExercises });
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
   const [dateRange, setDateRange] = useState<DateRange | undefined>(undefined);
   const [selectedExId, setSelectedExId] = useState('');
   const [exComps, setExComps] = useState<{ week: any; month: any; lastSession: any } | null>(null);
