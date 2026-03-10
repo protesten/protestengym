@@ -62,8 +62,10 @@ const SET_TYPE_CHIPS: Record<SetType, { label: string; color: string }> = {
   work: { label: 'T', color: 'bg-primary/20 text-primary' },
   warmup: { label: 'C', color: 'bg-orange-400/20 text-orange-400' },
   approach: { label: 'A', color: 'bg-blue-400/20 text-blue-400' },
+  drop_set: { label: 'D', color: 'bg-purple-400/20 text-purple-400' },
+  partial: { label: 'P', color: 'bg-yellow-400/20 text-yellow-400' },
 };
-const SET_TYPE_ORDER: SetType[] = ['work', 'warmup', 'approach'];
+const SET_TYPE_ORDER: SetType[] = ['work', 'warmup', 'approach', 'drop_set', 'partial'];
 
 function SetTypeChip({ type, onChange }: { type: SetType; onChange: (t: SetType) => void }) {
   const chip = SET_TYPE_CHIPS[type] ?? SET_TYPE_CHIPS.work;
