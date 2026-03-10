@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, AlertTriangle, Clock, Flame } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -8,6 +8,9 @@ import { BodyHeatmap } from '@/components/BodyHeatmap';
 import { FatigueHistory } from '@/components/FatigueHistory';
 import { AIInsightCard } from '@/components/AIInsightCard';
 import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { getProfile } from '@/lib/api';
+import { getAppFeatures } from '@/lib/ai-insights';
 import {
   computeFatigue,
   estimateRecoveryHours,
@@ -20,6 +23,8 @@ import {
 
 export default function Fatigue() {
   const navigate = useNavigate();
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
   const [loading, setLoading] = useState(true);
   const [fatigue, setFatigue] = useState<Map<number, number>>(new Map());
   const [muscleNames, setMuscleNames] = useState<Map<number, string>>(new Map());
@@ -190,65 +195,71 @@ export default function Fatigue() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Mapa de Fatiga</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {fatigue.size === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No hay datos de entrenamiento en los últimos 14 días.
-                </p>
-              ) : (
-                <BodyHeatmap fatigue={fatigue} muscleNames={muscleNames} activeMuscleIds={activeMuscleIds} />
-              )}
-            </CardContent>
-          </Card>
+          {feat.fatigue_heatmap && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Mapa de Fatiga</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {fatigue.size === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No hay datos de entrenamiento en los últimos 14 días.
+                  </p>
+                ) : (
+                  <BodyHeatmap fatigue={fatigue} muscleNames={muscleNames} activeMuscleIds={activeMuscleIds} />
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
+          {feat.fatigue_history && (
+            <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
+          )}
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4" />
-                Músculos Críticos
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {criticalMuscles.length === 0 ? (
-                <p className="text-sm text-muted-foreground">Todos los músculos están en niveles seguros ✓</p>
-              ) : (
-                <div className="space-y-3">
-                  {criticalMuscles.map(([id, pct]) => {
-                    const hours = estimateRecoveryHours(pct, id, recoveryMap);
-                    return (
-                      <div key={id} className="space-y-1">
-                        <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium truncate">{muscleNames.get(id) ?? `Músculo ${id}`}</span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs font-bold" style={{ color: fatigueColor(pct) }}>
-                              {Math.round(pct)}%
-                            </span>
-                            <div className="flex items-center gap-1 text-muted-foreground">
-                              <Clock className="h-3 w-3" />
-                              <span className="text-[11px]">{hours}h</span>
+          {feat.fatigue_critical && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4" />
+                  Músculos Críticos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {criticalMuscles.length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Todos los músculos están en niveles seguros ✓</p>
+                ) : (
+                  <div className="space-y-3">
+                    {criticalMuscles.map(([id, pct]) => {
+                      const hours = estimateRecoveryHours(pct, id, recoveryMap);
+                      return (
+                        <div key={id} className="space-y-1">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium truncate">{muscleNames.get(id) ?? `Músculo ${id}`}</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className="text-xs font-bold" style={{ color: fatigueColor(pct) }}>
+                                {Math.round(pct)}%
+                              </span>
+                              <div className="flex items-center gap-1 text-muted-foreground">
+                                <Clock className="h-3 w-3" />
+                                <span className="text-[11px]">{hours}h</span>
+                              </div>
                             </div>
                           </div>
+                          <Progress
+                            value={Math.round(pct)}
+                            className="h-1.5"
+                            style={{ ['--progress-color' as any]: fatigueColor(pct) }}
+                          />
                         </div>
-                        <Progress
-                          value={Math.round(pct)}
-                          className="h-1.5"
-                          style={{ ['--progress-color' as any]: fatigueColor(pct) }}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </CardContent>
-          </Card>
+                      );
+                    })}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          {fatigue.size > 0 && (
+          {feat.fatigue_overview && fatigue.size > 0 && (
             <Card>
               <CardHeader className="pb-2">
                 <CardTitle className="text-base">Resumen General</CardTitle>

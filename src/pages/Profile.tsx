@@ -11,9 +11,9 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, User, Sparkles, ChevronDown, Palette, Type } from 'lucide-react';
+import { LogOut, User, Sparkles, ChevronDown, Palette, Type, LayoutGrid, RotateCcw } from 'lucide-react';
 import { AIInsightCard } from '@/components/AIInsightCard';
-import { getAIPreferences, DEFAULT_AI_PREFERENCES, type AIPreferences } from '@/lib/ai-insights';
+import { getAIPreferences, getAppFeatures, DEFAULT_AI_PREFERENCES, DEFAULT_APP_FEATURES, type AIPreferences, type AppFeaturePreferences } from '@/lib/ai-insights';
 import { toast } from 'sonner';
 
 const AI_FEATURE_LABELS: Record<string, string> = {
@@ -38,6 +38,53 @@ const THEME_OPTIONS = [
   { value: 'dark-red', label: '🔴 Rojo' },
 ];
 
+const APP_FEATURE_GROUPS: { title: string; keys: { key: keyof AppFeaturePreferences; label: string }[] }[] = [
+  {
+    title: '🏠 Pantalla de Inicio',
+    keys: [
+      { key: 'home_weekly_activity', label: 'Actividad semanal' },
+      { key: 'home_quick_stats', label: 'Estadísticas rápidas' },
+      { key: 'home_streak', label: 'Racha de entrenamiento' },
+      { key: 'home_today_routine', label: 'Sugerencia de rutina' },
+      { key: 'home_recent_sessions', label: 'Sesiones recientes' },
+      { key: 'home_quick_actions', label: 'Accesos rápidos' },
+    ],
+  },
+  {
+    title: '📊 Análisis (tabs)',
+    keys: [
+      { key: 'analysis_exercise', label: 'Ejercicio' },
+      { key: 'analysis_muscle', label: 'Músculo' },
+      { key: 'analysis_volume', label: 'Volumen' },
+      { key: 'analysis_1rm', label: '1RM' },
+      { key: 'analysis_prs', label: 'PRs' },
+      { key: 'analysis_body', label: 'Cuerpo' },
+      { key: 'analysis_relative', label: 'F. Relativa' },
+      { key: 'analysis_summary', label: 'Resumen' },
+    ],
+  },
+  {
+    title: '🔥 Fatiga',
+    keys: [
+      { key: 'fatigue_heatmap', label: 'Mapa de fatiga' },
+      { key: 'fatigue_history', label: 'Historial de fatiga' },
+      { key: 'fatigue_critical', label: 'Músculos críticos' },
+      { key: 'fatigue_overview', label: 'Resumen general' },
+    ],
+  },
+  {
+    title: '📱 Secciones del menú',
+    keys: [
+      { key: 'nav_coach', label: 'Coach IA' },
+      { key: 'nav_fatigue', label: 'Fatiga' },
+      { key: 'nav_measurements', label: 'Medidas' },
+      { key: 'nav_programs', label: 'Programas' },
+      { key: 'nav_calendar', label: 'Calendario' },
+      { key: 'nav_report', label: 'Informe mensual' },
+    ],
+  },
+];
+
 export default function Profile() {
   const { user, signOut } = useAuth();
   const queryClient = useQueryClient();
@@ -48,7 +95,9 @@ export default function Profile() {
   const [birthDate, setBirthDate] = useState('');
   const [sex, setSex] = useState('');
   const [aiPrefs, setAiPrefs] = useState<AIPreferences>(DEFAULT_AI_PREFERENCES);
+  const [appFeatures, setAppFeatures] = useState<AppFeaturePreferences>({ ...DEFAULT_APP_FEATURES });
   const [showAiFeatures, setShowAiFeatures] = useState(false);
+  const [showAppFeatures, setShowAppFeatures] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -59,6 +108,7 @@ export default function Profile() {
       setBirthDate((profile as any).birth_date ?? '');
       setSex((profile as any).sex ?? '');
       setAiPrefs(getAIPreferences(prefs));
+      setAppFeatures(getAppFeatures(prefs));
     }
   }, [profile]);
 
@@ -76,6 +126,7 @@ export default function Profile() {
           ai_features: aiPrefs.ai_features,
           font_size: aiPrefs.font_size,
           theme: aiPrefs.theme,
+          app_features: appFeatures,
         },
       };
       if (heightCm.trim()) updateData.height_cm = Number(heightCm);
@@ -95,6 +146,10 @@ export default function Profile() {
 
   const updateAiFeature = (feature: string, enabled: boolean) => {
     setAiPrefs(prev => ({ ...prev, ai_features: { ...prev.ai_features, [feature]: enabled } }));
+  };
+
+  const updateAppFeature = (key: keyof AppFeaturePreferences, value: boolean) => {
+    setAppFeatures(prev => ({ ...prev, [key]: value }));
   };
 
   const initials = (displayName || user?.email || '?').slice(0, 2).toUpperCase();
@@ -190,6 +245,49 @@ export default function Profile() {
             </div>
             <Switch checked={aiPrefs.font_size === 'large'} onCheckedChange={v => updateAiPref('font_size', v ? 'large' : 'normal')} />
           </div>
+        </div>
+
+        {/* App Features section */}
+        <div className="rounded-xl bg-card border border-border p-4 space-y-3">
+          <Collapsible open={showAppFeatures} onOpenChange={setShowAppFeatures}>
+            <CollapsibleTrigger className="flex items-center justify-between w-full">
+              <h3 className="text-sm font-bold flex items-center gap-2">
+                <LayoutGrid className="h-4 w-4 text-primary" />
+                Personalizar App
+              </h3>
+              <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${showAppFeatures ? 'rotate-180' : ''}`} />
+            </CollapsibleTrigger>
+            <CollapsibleContent>
+              <p className="text-xs text-muted-foreground mt-2 mb-3">Activa o desactiva las fichas y secciones que quieras ver.</p>
+              <div className="space-y-4">
+                {APP_FEATURE_GROUPS.map(group => (
+                  <div key={group.title}>
+                    <p className="text-xs font-bold text-muted-foreground mb-2">{group.title}</p>
+                    <div className="space-y-2">
+                      {group.keys.map(({ key, label }) => (
+                        <div key={key} className="flex items-center justify-between">
+                          <span className="text-xs text-muted-foreground">{label}</span>
+                          <Switch
+                            checked={appFeatures[key]}
+                            onCheckedChange={v => updateAppFeature(key, v)}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs rounded-lg"
+                  onClick={() => setAppFeatures({ ...DEFAULT_APP_FEATURES })}
+                >
+                  <RotateCcw className="h-3 w-3 mr-1.5" />
+                  Restaurar valores por defecto
+                </Button>
+              </div>
+            </CollapsibleContent>
+          </Collapsible>
         </div>
 
         {/* AI section */}
