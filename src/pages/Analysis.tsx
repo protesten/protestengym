@@ -20,6 +20,8 @@ import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Act
 import { BodyEvolutionPanel } from '@/components/BodyEvolutionPanel';
 import { RelativeStrengthPanel } from '@/components/RelativeStrengthPanel';
 import { Skeleton } from '@/components/ui/skeleton';
+import { getProfile } from '@/lib/api';
+import { getAppFeatures } from '@/lib/ai-insights';
 
 function ArrowBadge({ c }: { c: Comparison }) {
   const cls = c.arrow === '↑' ? 'arrow-up' : c.arrow === '↓' ? 'arrow-down' : 'arrow-equal';
