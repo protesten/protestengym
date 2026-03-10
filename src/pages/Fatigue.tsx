@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { BodyHeatmap } from '@/components/BodyHeatmap';
 import { FatigueHistory } from '@/components/FatigueHistory';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { supabase } from '@/integrations/supabase/client';
 import {
   computeFatigue,
