@@ -1,5 +1,5 @@
 export type TrackingType = 'weight_reps' | 'reps_only' | 'time_only' | 'distance_time';
-export type SetType = 'warmup' | 'approach' | 'work';
+export type SetType = 'warmup' | 'approach' | 'work' | 'drop_set' | 'partial';
 
 export const MUSCLE_GROUPS: Record<string, string[]> = {
   'Pecho': ['Pectoral mayor', 'Pectoral menor'],
