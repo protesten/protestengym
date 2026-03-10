@@ -16,6 +16,7 @@ import { MeasurementCard } from '@/components/measurements/MeasurementCard';
 import { FIELD_SECTIONS, ALL_FIELDS } from '@/components/measurements/fields';
 import { ChevronDown } from 'lucide-react';
 import { AnthropometricAnalysis } from '@/components/measurements/AnthropometricAnalysis';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { estimateBodyFatNavy } from '@/lib/body-fat';
 
 export default function Measurements() {
