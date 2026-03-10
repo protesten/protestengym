@@ -1,13 +1,15 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useEffect } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClient, QueryClientProvider, useQuery } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/contexts/AuthContext";
 import { ProtectedRoute } from "@/components/ProtectedRoute";
 import { BottomNav } from "@/components/BottomNav";
 import { Loader2 } from "lucide-react";
+import { getAIPreferences } from "@/lib/ai-insights";
+import { getProfile } from "@/lib/api";
 
 const Index = lazy(() => import("./pages/Index"));
 const Exercises = lazy(() => import("./pages/Exercises"));
@@ -44,9 +46,29 @@ const PageLoader = () => (
   </div>
 );
 
+function ThemeAndFontApplier() {
+  const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  const prefs = getAIPreferences(profile?.preferences);
+
+  useEffect(() => {
+    const html = document.documentElement;
+    // Apply font size
+    html.classList.toggle('font-large', prefs.font_size === 'large');
+    // Apply theme
+    const themeClasses = ['theme-dark-orange', 'theme-dark-blue', 'theme-dark-green', 'theme-dark-purple', 'theme-dark-red'];
+    themeClasses.forEach(c => html.classList.remove(c));
+    if (prefs.theme && prefs.theme !== 'dark-orange') {
+      html.classList.add(`theme-${prefs.theme}`);
+    }
+  }, [prefs.font_size, prefs.theme]);
+
+  return null;
+}
+
 const ProtectedPage = ({ children }: { children: React.ReactNode }) => (
   <ProtectedRoute>
     <div className="min-h-screen pb-14 w-full overflow-x-hidden">
+      <ThemeAndFontApplier />
       {children}
       <BottomNav />
     </div>

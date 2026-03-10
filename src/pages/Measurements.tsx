@@ -47,7 +47,6 @@ export default function Measurements() {
       if (form[f.key]?.trim()) row[f.key] = Number(form[f.key]);
       else row[f.key] = null;
     }
-    // Auto-calculate body fat if not manually entered
     if (!form.body_fat_pct?.trim()) {
       const heightCm = (profile as any)?.height_cm as number | null;
       const sex = (profile as any)?.sex as string | null;
@@ -143,10 +142,7 @@ export default function Measurements() {
         </Button>
       </div>
 
-      {/* Anthropometric Analysis */}
-      <AnthropometricAnalysis latestMeasurement={measurements?.[0] ?? null} />
-
-      {/* AI Body Insight */}
+      {/* AI Body Insight — moved to top */}
       {measurements && measurements.length >= 2 && (
         <AIInsightCard
           context="measurement_insight"
@@ -160,6 +156,9 @@ export default function Measurements() {
           label="✨ Analizar composición"
         />
       )}
+
+      {/* Anthropometric Analysis */}
+      <AnthropometricAnalysis latestMeasurement={measurements?.[0] ?? null} />
 
       {/* Chart */}
       <MeasurementChart measurements={measurements} />
@@ -178,7 +177,6 @@ export default function Measurements() {
             />
           </div>
 
-          {/* Weight & body fat */}
           <div className="grid grid-cols-2 gap-2">
             {ALL_FIELDS.filter(f => f.key === 'weight_kg' || f.key === 'body_fat_pct').map(f => (
               <div key={f.key}>
@@ -194,7 +192,6 @@ export default function Measurements() {
             ))}
           </div>
 
-          {/* Sections */}
           {FIELD_SECTIONS.map(section => (
             <Collapsible key={section.key} open={openSections[section.key]} onOpenChange={() => toggleSection(section.key)}>
               <CollapsibleTrigger className="flex items-center justify-between w-full py-1.5">
