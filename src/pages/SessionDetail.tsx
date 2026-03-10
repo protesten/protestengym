@@ -26,6 +26,7 @@ import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggesti
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download, CheckCircle2, Flag } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { Progress } from '@/components/ui/progress';
