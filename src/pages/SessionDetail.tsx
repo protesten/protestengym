@@ -683,6 +683,26 @@ export default function SessionDetail() {
         </div>
       )}
 
+      {/* AI Session Feedback */}
+      {(session as any).is_completed && summary && (
+        <div className="mt-3">
+          <AIInsightCard
+            context="session_feedback"
+            data={{
+              date: session.date,
+              strengthTotal: summary.strengthTotal,
+              isometricTotal: summary.isometricTotal,
+              cardioTime: summary.cardioTime,
+              exerciseCount: sessionExercises?.length ?? 0,
+              totalSets: allSets?.filter(s => s.set_type === 'work').length ?? 0,
+              avgRPE: allSets?.filter(s => s.rpe).reduce((sum, s) => sum + (s.rpe ?? 0), 0)! / Math.max(1, allSets?.filter(s => s.rpe).length ?? 1),
+            }}
+            cacheKey={`session-${sessionId}`}
+            label="✨ Feedback de sesión"
+          />
+        </div>
+      )}
+
       {hasOfflinePending && (
         <div className="fixed top-2 left-1/2 -translate-x-1/2 z-50 bg-card border border-border rounded-lg px-3 py-1.5 text-xs font-medium text-muted-foreground shadow-lg">
           ⏳ Datos pendientes de sincronizar

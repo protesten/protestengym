@@ -181,6 +181,26 @@ export default function RoutineDetail() {
         })}
         {(!routineExercises || routineExercises.length === 0) && <p className="text-center text-muted-foreground text-sm py-8">Sin ejercicios aún</p>}
       </div>
+
+      {/* AI Routine Review */}
+      {routineExercises && routineExercises.length >= 2 && (
+        <div className="mt-4">
+          <AIInsightCard
+            context="routine_review"
+            data={{
+              routineName: routine.name,
+              trainingGoal: currentGoal,
+              exercises: routineExercises.map(re => ({
+                name: exercises?.find(e => e.id === re.exercise_id)?.name ?? 'Desconocido',
+                muscles: exercises?.find(e => e.id === re.exercise_id)?.primary_muscle_ids ?? [],
+                setsCount: getPlannedSets(re).length,
+              })),
+            }}
+            cacheKey={`routine-${routineId}-${routineExercises.length}`}
+            label="✨ Evaluar rutina"
+          />
+        </div>
+      )}
     </div>
   );
 }

@@ -109,6 +109,20 @@ export default function Index() {
         </div>
       </div>
 
+      {/* AI Daily Briefing */}
+      <AIInsightCard
+        context="home_summary"
+        data={{
+          weekCount,
+          totalSessions,
+          weekVolume,
+          lastSessionDate: sessions?.[0]?.date ?? null,
+          weekDaysActive: weekDays.filter(d => d.active).map(d => d.label),
+        }}
+        cacheKey={`home-${new Date().toISOString().slice(0, 10)}`}
+        label="✨ Briefing diario"
+      />
+
       {/* Today's Routine Suggestion */}
       <TodayRoutineSuggestion />
 

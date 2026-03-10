@@ -134,6 +134,22 @@ export default function SessionCalendar() {
           )}
         </div>
       )}
+
+      {/* AI Calendar Patterns */}
+      {sessions && sessions.length >= 5 && (
+        <div className="mt-4">
+          <AIInsightCard
+            context="calendar_patterns"
+            data={{
+              totalSessions: sessions.length,
+              dates: sessions.slice(0, 30).map(s => s.date),
+              completedCount: sessions.filter((s: any) => s.is_completed).length,
+            }}
+            cacheKey={`calendar-${sessions.length}`}
+            label="✨ Analizar patrones"
+          />
+        </div>
+      )}
     </div>
   );
 }

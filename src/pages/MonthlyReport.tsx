@@ -112,6 +112,24 @@ export default function MonthlyReportPage() {
             <p className="text-center text-[9px] text-muted-foreground/40 font-mono pt-2">GymTracker</p>
           </div>
 
+          {/* AI Narrative */}
+          <AIInsightCard
+            context="monthly_report_narrative"
+            data={{
+              month: report.month,
+              sessions: report.sessionCount,
+              volume: report.totalVolume,
+              sets: report.totalSets,
+              prs: report.prsBeaten,
+              avgPerWeek: report.avgSessionsPerWeek,
+              topMuscles: report.topMuscles,
+              weakMuscles: report.weakMuscles,
+              best1RMs: report.best1RMs,
+            }}
+            cacheKey={`report-${monthOffset}`}
+            label="✨ Narrativa del coach"
+          />
+
           {/* Action buttons */}
           <div className="flex gap-2 mt-4">
             <Button className="flex-1 gradient-primary text-primary-foreground border-0 rounded-xl" onClick={handleDownload}>

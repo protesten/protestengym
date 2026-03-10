@@ -389,6 +389,15 @@ export default function Analysis() {
             {periodData.every(p => p.sessionCount === 0) && <p className="text-center text-muted-foreground text-sm py-8">Sin datos en este período</p>}
           </div>
           )}
+          {periodData.some(p => p.sessionCount > 0) && (
+            <AIInsightCard
+              context="session_feedback"
+              compact
+              data={{ periods: periodData.slice(0, 4).map(p => ({ label: p.label, sessions: p.sessionCount, volume: p.strengthTotal, sets: p.totalWorkSets, rpe: p.avgRPE })) }}
+              cacheKey={`summary-${periodGranularity}`}
+              label="✨ Analizar tendencia"
+            />
+          )}
         </TabsContent>
       </Tabs>
     </div>

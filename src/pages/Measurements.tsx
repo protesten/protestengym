@@ -146,6 +146,21 @@ export default function Measurements() {
       {/* Anthropometric Analysis */}
       <AnthropometricAnalysis latestMeasurement={measurements?.[0] ?? null} />
 
+      {/* AI Body Insight */}
+      {measurements && measurements.length >= 2 && (
+        <AIInsightCard
+          context="measurement_insight"
+          data={{
+            latest: measurements[0],
+            previous: measurements[1],
+            count: measurements.length,
+            profile: { height_cm: (profile as any)?.height_cm, sex: (profile as any)?.sex },
+          }}
+          cacheKey={`measurements-${measurements[0]?.id}`}
+          label="✨ Analizar composición"
+        />
+      )}
+
       {/* Chart */}
       <MeasurementChart measurements={measurements} />
 

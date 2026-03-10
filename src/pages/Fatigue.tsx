@@ -255,6 +255,23 @@ export default function Fatigue() {
               </CardContent>
             </Card>
           )}
+
+          {/* AI Fatigue Advice */}
+          {fatigue.size > 0 && (
+            <AIInsightCard
+              context="fatigue_advice"
+              data={{
+                muscles: Array.from(fatigue.entries()).map(([id, pct]) => ({
+                  name: muscleNames.get(id) ?? `#${id}`,
+                  fatigue: Math.round(pct),
+                  recovery: recoveryMap.get(id) ?? 'medium',
+                })),
+                avgFatigue: Math.round(Array.from(fatigue.values()).reduce((a, b) => a + b, 0) / fatigue.size),
+              }}
+              cacheKey="fatigue"
+              label="✨ Consejo de recuperación"
+            />
+          )}
         </>
       )}
     </div>
