@@ -195,22 +195,26 @@ export default function Fatigue() {
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">Mapa de Fatiga</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {fatigue.size === 0 ? (
-                <p className="text-sm text-muted-foreground text-center py-8">
-                  No hay datos de entrenamiento en los últimos 14 días.
-                </p>
-              ) : (
-                <BodyHeatmap fatigue={fatigue} muscleNames={muscleNames} activeMuscleIds={activeMuscleIds} />
-              )}
-            </CardContent>
-          </Card>
+          {feat.fatigue_heatmap && (
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Mapa de Fatiga</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {fatigue.size === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-8">
+                    No hay datos de entrenamiento en los últimos 14 días.
+                  </p>
+                ) : (
+                  <BodyHeatmap fatigue={fatigue} muscleNames={muscleNames} activeMuscleIds={activeMuscleIds} />
+                )}
+              </CardContent>
+            </Card>
+          )}
 
-          <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
+          {feat.fatigue_history && (
+            <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
+          )}
 
           <Card>
             <CardHeader className="pb-2">
