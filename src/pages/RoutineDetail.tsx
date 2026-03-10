@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import ExerciseSearchSelect from '@/components/ExerciseSearchSelect';
 import { ArrowLeft, Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { toast } from 'sonner';
 
 const DEFAULT_PLANNED_SET: PlannedSet = { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
