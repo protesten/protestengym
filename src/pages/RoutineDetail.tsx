@@ -226,9 +226,17 @@ export default function RoutineDetail() {
                 {plannedSets.map((ps, j) => (
                   <PlannedSetRow key={j} ps={ps} index={j} trackingType={trackingType} onChange={updated => handleUpdatePlannedSet(re.id, plannedSets, j, updated)} onDelete={() => handleDeletePlannedSet(re.id, plannedSets, j)} />
                 ))}
-                <Button variant="outline" size="sm" className="mt-1.5 w-full text-xs h-7 rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType)}>
-                  <Plus className="h-3 w-3 mr-1" />Añadir serie
-                </Button>
+                <div className="flex gap-1.5 mt-1.5">
+                  <Button variant="outline" size="sm" className="flex-1 text-xs h-7 rounded-lg border-dashed border-border hover:border-primary/30" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType)}>
+                    <Plus className="h-3 w-3 mr-1" />Serie
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7 rounded-lg border-dashed border-purple-400/30 text-purple-400 hover:border-purple-400/50 hover:bg-purple-400/5" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType, 'drop_set')}>
+                    <Plus className="h-3 w-3 mr-1" />Drop
+                  </Button>
+                  <Button variant="outline" size="sm" className="text-xs h-7 rounded-lg border-dashed border-yellow-400/30 text-yellow-400 hover:border-yellow-400/50 hover:bg-yellow-400/5" onClick={() => handleAddPlannedSet(re.id, plannedSets, trackingType, 'partial')}>
+                    <Plus className="h-3 w-3 mr-1" />Parcial
+                  </Button>
+                </div>
               </div>
             </div>
           );
