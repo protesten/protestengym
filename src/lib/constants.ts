@@ -59,6 +59,9 @@ export type PlannedSet = {
   max_time_seconds: number | null;
   min_distance_meters: number | null;
   max_distance_meters: number | null;
+  // Drop set specific
+  num_drops?: number | null;
+  weight_reduction_pct?: number | null;
 };
 
 export type WeightUnit = 'kg' | 'lb';
