@@ -1,47 +1,71 @@
 
 
-## Plan: Corrección de 4 problemas de seguridad restantes
+## Plan: Fichas/funciones configurables en el perfil
 
-### 1. HTML Injection en notificación admin (edge function)
-**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
+### Concepto
+Ampliar el sistema de preferencias existente (`preferences` JSONB en `profiles`) con un nuevo campo `app_features` que permita activar/desactivar secciones y fichas de la app. Cada pantalla consultará estas preferencias para ocultar componentes desactivados.
 
-Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
+### Funciones configurables identificadas
 
-### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
-**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
+**Pantalla de Inicio:**
+- `home_weekly_activity` — Ficha de actividad semanal (L-M-X-J-V-S-D)
+- `home_quick_stats` — Estadísticas rápidas (sesiones, volumen)
+- `home_streak` — Racha de entrenamiento
+- `home_today_routine` — Sugerencia de rutina del día
+- `home_recent_sessions` — Sesiones recientes
+- `home_quick_actions` — Accesos rápidos (Rutinas/Análisis)
 
-**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+**Análisis (tabs):**
+- `analysis_exercise` — Tab Ejercicio
+- `analysis_muscle` — Tab Músculo
+- `analysis_volume` — Tab Volumen
+- `analysis_1rm` — Tab 1RM
+- `analysis_prs` — Tab PRs
+- `analysis_body` — Tab Cuerpo
+- `analysis_relative` — Tab F. Relativa
+- `analysis_summary` — Tab Resumen
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_approved_user()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND is_approved = true
-  );
-$$;
-```
+**Fatiga:**
+- `fatigue_heatmap` — Mapa de fatiga corporal
+- `fatigue_history` — Historial de fatiga
+- `fatigue_critical` — Músculos críticos
+- `fatigue_overview` — Resumen general
 
-Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
+**Navegación / Secciones completas:**
+- `nav_coach` — Coach IA
+- `nav_fatigue` — Fatiga
+- `nav_measurements` — Medidas
+- `nav_programs` — Programas
+- `nav_calendar` — Calendario
+- `nav_report` — Informe mensual
 
-Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
-
-### 3. Error messages internos expuestos (3 edge functions)
-**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
-
-Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
-
-### 4. Leaked password protection
-Activar mediante la herramienta de configuración de autenticación.
-
-### Archivos afectados
+### Archivos a modificar
 
 | Archivo | Cambio |
 |---|---|
-| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
-| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
-| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
-| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
-| Auth config | Leaked password protection |
+| `src/lib/ai-insights.ts` | Añadir interfaz `AppFeatures`, defaults, helper `getAppFeatures()` |
+| `src/pages/Profile.tsx` | Nueva sección "Personalizar App" con switches agrupados por categoría (Inicio, Análisis, Fatiga, Secciones) |
+| `src/pages/Index.tsx` | Leer preferencias y envolver cada ficha en condicional |
+| `src/pages/Analysis.tsx` | Filtrar tabs visibles según preferencias |
+| `src/pages/Fatigue.tsx` | Ocultar secciones desactivadas |
+| `src/components/BottomNav.tsx` | Filtrar `moreItems` según `nav_*` prefs |
+
+### Implementacion
+
+1. **`ai-insights.ts`**: Añadir tipo `AppFeaturePreferences` con todos los keys arriba (default `true`). Añadir `getAppFeatures(prefs)` similar a `getAIPreferences`.
+
+2. **`Profile.tsx`**: Nueva sección colapsable "Personalizar App" con icono `LayoutGrid`, agrupada en sub-secciones:
+   - **Inicio**: 6 switches
+   - **Análisis**: 8 switches (uno por tab)
+   - **Fatiga**: 4 switches
+   - **Secciones**: 6 switches (ocultar secciones enteras del menú)
+   
+   Se guardan en `preferences.app_features` al pulsar Guardar.
+
+3. **Cada página**: Importar `getAppFeatures`, leer del perfil cacheado con `useQuery(['profile'])`, y renderizar condicionalmente.
+
+4. **`BottomNav.tsx`**: Leer preferencias del perfil para filtrar items del menú "Más" según `nav_*`.
+
+### No se requieren migraciones SQL
+Todo se almacena en el campo JSONB `preferences` existente.
 
