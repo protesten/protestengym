@@ -4,6 +4,7 @@ import { generateMonthlyReport, type MonthlyReport } from '@/db/monthly-report';
 import { exportElementAsImage, shareElementAsImage } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Share2, Trophy, Dumbbell, Flame, TrendingUp, Calendar } from 'lucide-react';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { toast } from 'sonner';
 
 export default function MonthlyReportPage() {
