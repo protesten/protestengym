@@ -11,7 +11,8 @@ export type InsightContext =
   | 'calendar_patterns'
   | 'monthly_report_narrative'
   | 'profile_recommendations'
-  | 'new_session_suggestion';
+  | 'new_session_suggestion'
+  | 'warmup_suggestion';
 
 export interface AppFeaturePreferences {
   // Home
