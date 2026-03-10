@@ -156,7 +156,7 @@ export default function RoutineDetail() {
     const ex = exercises?.find(e => e.id === exerciseId);
     return (ex?.tracking_type as TrackingType) ?? 'weight_reps';
   };
-  const handleAddPlannedSet = (reId: string, current: PlannedSet[], trackingType: TrackingType) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, getDefaultPlannedSet(trackingType)] }); };
+  const handleAddPlannedSet = (reId: string, current: PlannedSet[], trackingType: TrackingType, setType?: SetType) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: [...current, getDefaultPlannedSet(trackingType, setType)] }); };
   const handleUpdatePlannedSet = (reId: string, current: PlannedSet[], index: number, updated: PlannedSet) => { const next = [...current]; next[index] = updated; updatePlannedSetsMutation.mutate({ reId, plannedSets: next }); };
   const handleDeletePlannedSet = (reId: string, current: PlannedSet[], index: number) => { updatePlannedSetsMutation.mutate({ reId, plannedSets: current.filter((_, i) => i !== index) }); };
 
