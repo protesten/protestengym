@@ -498,6 +498,24 @@ export default function SessionDetail() {
             {/* Previous session */}
             <PreviousSessionReference sets={prevSets} date={prevDate} trackingType={ex?.tracking_type ?? 'weight_reps'} />
 
+            {/* AI Warmup suggestion */}
+            {ex?.tracking_type === 'weight_reps' && sets.length === 0 && (
+              <div className="mt-2">
+                <AIInsightCard
+                  context="warmup_suggestion"
+                  data={{
+                    exerciseName: ex?.name ?? '',
+                    trainingGoal: trainingGoal ?? 'hypertrophy',
+                    plannedSets: plannedSets.length,
+                    previousWeight: prevSets.length > 0 ? prevSets.filter(s => s.set_type === 'work').map(s => ({ weight: s.weight, reps: s.reps, rpe: s.rpe }))[0] ?? null : null,
+                  }}
+                  cacheKey={`warmup-${se.exercise_id}-${sessionId}`}
+                  compact
+                  label="✨ Sugerir aproximación"
+                />
+              </div>
+            )}
+
             {/* Sets label */}
             {sets.length > 0 && (
               <p className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground mt-2 mb-1.5">Registro de series</p>
