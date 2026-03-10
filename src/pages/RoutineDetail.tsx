@@ -33,43 +33,74 @@ function getDefaultPlannedSet(trackingType: TrackingType, setType?: SetType): Pl
 }
 
 function PlannedSetRow({ ps, index, trackingType, onChange, onDelete }: { ps: PlannedSet; index: number; trackingType: TrackingType; onChange: (ps: PlannedSet) => void; onDelete: () => void }) {
+  const isDropSet = ps.set_type === 'drop_set';
+  const isPartial = ps.set_type === 'partial';
+
   return (
     <div className="flex flex-wrap items-center gap-1.5 py-1.5 px-2 rounded-lg bg-secondary/30">
       <span className="text-xs text-muted-foreground w-6 shrink-0 font-bold">S{index + 1}</span>
-      <Select value={ps.set_type} onValueChange={v => onChange({ ...ps, set_type: v as SetType })}>
+      <Select value={ps.set_type} onValueChange={v => {
+        const newType = v as SetType;
+        if (newType === 'drop_set') {
+          onChange({ ...ps, set_type: newType, num_drops: ps.num_drops ?? 3, weight_reduction_pct: ps.weight_reduction_pct ?? 20, rpe: null, min_reps: null, max_reps: null });
+        } else if (newType === 'partial') {
+          onChange({ ...ps, set_type: newType, rpe: null, min_reps: null, max_reps: null, num_drops: null, weight_reduction_pct: null });
+        } else {
+          onChange({ ...ps, set_type: newType, num_drops: null, weight_reduction_pct: null });
+        }
+      }}>
         <SelectTrigger className="w-24 h-7 text-xs rounded-md bg-card border-border"><SelectValue /></SelectTrigger>
         <SelectContent>{Object.entries(SET_TYPE_LABELS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}</SelectContent>
       </Select>
-      <Select value={ps.rpe?.toString() ?? ''} onValueChange={v => onChange({ ...ps, rpe: v ? Number(v) : null })}>
-        <SelectTrigger className="w-20 h-7 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
-        <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
-      </Select>
 
-      {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
-        <div className="flex items-center gap-1.5">
-          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-xs text-muted-foreground">-</span>
-          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[11px] text-muted-foreground">reps</span>
-        </div>
-      )}
+      {isDropSet ? (
+        <>
+          <div className="flex items-center gap-1.5">
+            <Input type="number" inputMode="numeric" placeholder="3" className="w-12 h-7 text-xs rounded-md bg-card border-border text-center" value={ps.num_drops ?? ''} onChange={e => onChange({ ...ps, num_drops: e.target.value ? Number(e.target.value) : null })} />
+            <span className="text-[11px] text-muted-foreground">drops</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <Input type="number" inputMode="numeric" placeholder="20" className="w-12 h-7 text-xs rounded-md bg-card border-border text-center" value={ps.weight_reduction_pct ?? ''} onChange={e => onChange({ ...ps, weight_reduction_pct: e.target.value ? Number(e.target.value) : null })} />
+            <span className="text-[11px] text-muted-foreground">% bajada</span>
+          </div>
+          <span className="text-[10px] text-purple-400 font-medium ml-1">Al fallo</span>
+        </>
+      ) : isPartial ? (
+        <span className="text-[10px] text-yellow-400 font-medium ml-1">Reps parciales al fallo</span>
+      ) : (
+        <>
+          <Select value={ps.rpe?.toString() ?? ''} onValueChange={v => onChange({ ...ps, rpe: v ? Number(v) : null })}>
+            <SelectTrigger className="w-20 h-7 text-xs rounded-md bg-card border-border"><SelectValue placeholder="RPE" /></SelectTrigger>
+            <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
+          </Select>
 
-      {(trackingType === 'time_only' || trackingType === 'distance_time') && (
-        <div className="flex items-center gap-1.5">
-          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-xs text-muted-foreground">-</span>
-          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[11px] text-muted-foreground">seg</span>
-        </div>
-      )}
+          {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
+            <div className="flex items-center gap-1.5">
+              <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-[11px] text-muted-foreground">reps</span>
+            </div>
+          )}
 
-      {trackingType === 'distance_time' && (
-        <div className="flex items-center gap-1.5">
-          <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-xs text-muted-foreground">-</span>
-          <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[11px] text-muted-foreground">m</span>
-        </div>
+          {(trackingType === 'time_only' || trackingType === 'distance_time') && (
+            <div className="flex items-center gap-1.5">
+              <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-[11px] text-muted-foreground">seg</span>
+            </div>
+          )}
+
+          {trackingType === 'distance_time' && (
+            <div className="flex items-center gap-1.5">
+              <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-xs text-muted-foreground">-</span>
+              <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
+              <span className="text-[11px] text-muted-foreground">m</span>
+            </div>
+          )}
+        </>
       )}
 
       <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0 ml-auto" onClick={onDelete}><Trash2 className="h-3 w-3 text-destructive" /></Button>
