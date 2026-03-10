@@ -239,6 +239,15 @@ export default function Analysis() {
               ))}
             </div>
           )}
+          {muscleData.length > 0 && (
+            <AIInsightCard
+              context="routine_review"
+              compact
+              data={{ muscles: muscleData.map(m => ({ name: m.muscleName, strength: m.strength.current, isometric: m.isometric.current })) }}
+              cacheKey={`muscle-${musclePeriod}`}
+              label="✨ Evaluar volumen muscular"
+            />
+          )}
         </TabsContent>
 
         <TabsContent value="volume" className="mt-4">
