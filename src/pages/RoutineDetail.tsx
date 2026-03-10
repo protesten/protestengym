@@ -13,7 +13,13 @@ import { toast } from 'sonner';
 
 const DEFAULT_PLANNED_SET: PlannedSet = { set_type: 'work', rpe: 8, min_reps: 8, max_reps: 12, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
 
-function getDefaultPlannedSet(trackingType: TrackingType): PlannedSet {
+function getDefaultPlannedSet(trackingType: TrackingType, setType?: SetType): PlannedSet {
+  if (setType === 'drop_set') {
+    return { set_type: 'drop_set', rpe: null, min_reps: null, max_reps: null, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null, num_drops: 3, weight_reduction_pct: 20 };
+  }
+  if (setType === 'partial') {
+    return { set_type: 'partial', rpe: null, min_reps: null, max_reps: null, min_time_seconds: null, max_time_seconds: null, min_distance_meters: null, max_distance_meters: null };
+  }
   switch (trackingType) {
     case 'time_only':
       return { set_type: 'work', rpe: 8, min_reps: null, max_reps: null, min_time_seconds: 30, max_time_seconds: 60, min_distance_meters: null, max_distance_meters: null };
