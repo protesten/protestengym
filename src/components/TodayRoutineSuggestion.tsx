@@ -22,71 +22,152 @@ export function TodayRoutineSuggestion() {
       if (pErr || !programs?.length) return null;
       const program = programs[0];
 
-      // 2. Calculate current week
       const startDate = new Date(program.start_date ?? program.created_at);
       startDate.setHours(0, 0, 0, 0);
       const now = new Date();
       now.setHours(0, 0, 0, 0);
-      const diffDays = Math.floor((now.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-      const currentWeek = Math.floor(diffDays / 7) + 1;
 
-      if (currentWeek < 1 || currentWeek > program.weeks) return null;
+      // Program hasn't started yet
+      if (now < startDate) return null;
 
-      // 3. Get ALL routines for this day (multiple entries possible)
-      const { data: weeks, error: wErr } = await supabase
+      // 2. Get ALL program_weeks ordered by week_number, order_index
+      const { data: allWeeks, error: wErr } = await supabase
         .from('program_weeks')
         .select('*')
         .eq('program_id', program.id)
-        .eq('week_number', currentWeek)
+        .order('week_number')
         .order('order_index');
-      if (wErr || !weeks?.length) return null;
+      if (wErr || !allWeeks?.length) return null;
 
-      const routineIds = weeks.map(w => w.routine_id).filter(Boolean) as string[];
-      if (!routineIds.length) return null;
+      // Group by week_number (each week_number = one training day)
+      const dayMap = new Map<number, string[]>();
+      for (const w of allWeeks) {
+        if (!w.routine_id) continue;
+        const arr = dayMap.get(w.week_number) || [];
+        arr.push(w.routine_id);
+        dayMap.set(w.week_number, arr);
+      }
+      const trainingDays = Array.from(dayMap.entries()).sort((a, b) => a[0] - b[0]);
+      if (!trainingDays.length) return null;
 
-      // 4.5 Check which routines already have a session today
-      const today = now.toISOString().slice(0, 10);
-      const { data: todaySessions } = await supabase
+      // 3. Get all completed sessions since program start
+      const startStr = startDate.toISOString().slice(0, 10);
+      const { data: completedSessions } = await supabase
         .from('sessions')
-        .select('routine_id, is_completed')
-        .eq('date', today)
+        .select('routine_id, date')
+        .gte('date', startStr)
         .eq('is_completed', true);
-      const completedIds = new Set(todaySessions?.map(s => s.routine_id).filter(Boolean));
-      const pendingIds = routineIds.filter(id => !completedIds.has(id));
-      const allCompleted = pendingIds.length === 0;
 
-      if (allCompleted) {
+      const completedList = completedSessions ?? [];
+
+      // 4. Walk through training days, find first incomplete one
+      // For each day, we need ALL its routines to have been completed.
+      // If a routine appears in multiple days, we need enough completions to cover all prior days.
+      // Track how many times each routine_id has been "consumed" by prior completed days.
+      const consumedRoutines: string[] = []; // flat list of consumed routine_ids
+
+      let currentDayNumber: number | null = null;
+      let currentDayRoutineIds: string[] = [];
+
+      for (const [dayNum, routineIds] of trainingDays) {
+        // Check if all routines for this day are covered by completions not yet consumed
+        const availableCompletions = completedList
+          .filter(s => s.routine_id != null)
+          .map(s => s.routine_id as string);
+
+        // Remove already consumed from available
+        const remaining = [...availableCompletions];
+        for (const consumed of consumedRoutines) {
+          const idx = remaining.indexOf(consumed);
+          if (idx !== -1) remaining.splice(idx, 1);
+        }
+
+        // Check if this day's routines are all in remaining
+        const tempConsumed: string[] = [];
+        let allFound = true;
+        for (const rid of routineIds) {
+          const idx = remaining.indexOf(rid);
+          if (idx !== -1) {
+            remaining.splice(idx, 1);
+            tempConsumed.push(rid);
+          } else {
+            allFound = false;
+            break;
+          }
+        }
+
+        if (allFound) {
+          // This day is complete, consume the routines
+          consumedRoutines.push(...tempConsumed);
+        } else {
+          // This is the current day
+          currentDayNumber = dayNum;
+          currentDayRoutineIds = routineIds;
+          break;
+        }
+      }
+
+      const totalDays = trainingDays.length;
+      const isDeload = program.deload_week != null && currentDayNumber === program.deload_week;
+
+      // All days completed
+      if (currentDayNumber === null) {
         return {
           programName: program.name,
           routines: [],
-          currentWeek,
-          totalWeeks: program.weeks,
-          isDeload: program.deload_week === currentWeek,
+          currentDay: totalDays,
+          totalDays,
+          isDeload: false,
           allCompleted: true,
         };
       }
 
-      // 4. Get routine names
+      // 5. For the current day, filter out routines already completed TODAY
+      const todayStr = now.toISOString().slice(0, 10);
+      const todayCompletedRoutineIds = completedList
+        .filter(s => s.date === todayStr && s.routine_id != null)
+        .map(s => s.routine_id as string);
+
+      // Remove today's completions from pending (handle duplicates)
+      const todayCopy = [...todayCompletedRoutineIds];
+      const pendingIds = currentDayRoutineIds.filter(rid => {
+        const idx = todayCopy.indexOf(rid);
+        if (idx !== -1) {
+          todayCopy.splice(idx, 1);
+          return false;
+        }
+        return true;
+      });
+
+      if (pendingIds.length === 0) {
+        return {
+          programName: program.name,
+          routines: [],
+          currentDay: currentDayNumber,
+          totalDays,
+          isDeload,
+          allCompleted: true,
+        };
+      }
+
+      // 6. Get routine names
       const { data: routinesData, error: rErr } = await supabase
         .from('routines')
         .select('id, name')
         .in('id', pendingIds);
       if (rErr || !routinesData?.length) return null;
 
-      // Maintain order
       const routineMap = new Map(routinesData.map(r => [r.id, r]));
       const routines: TodayRoutine[] = pendingIds
         .map(id => routineMap.get(id))
         .filter(Boolean)
         .map(r => ({ routineId: r!.id, routineName: r!.name }));
 
-      const isDeload = program.deload_week === currentWeek;
-
       return {
         programName: program.name,
         routines,
-        currentWeek,
-        totalWeeks: program.weeks,
+        currentDay: currentDayNumber,
+        totalDays,
         isDeload,
         allCompleted: false,
       };
@@ -104,7 +185,7 @@ export function TodayRoutineSuggestion() {
           <div>
             <p className="text-sm font-bold">¡Todo completado! 🎉</p>
             <p className="text-[10px] text-muted-foreground">
-              {data.programName} · Sem. {data.currentWeek}/{data.totalWeeks}
+              {data.programName} · Día {data.currentDay}/{data.totalDays}
             </p>
           </div>
         </div>
@@ -118,7 +199,7 @@ export function TodayRoutineSuggestion() {
         <CalendarCheck className="h-4 w-4 text-primary" />
         <h3 className="text-sm font-bold">{data.routines.length > 1 ? 'Rutinas de hoy' : 'Rutina de hoy'}</h3>
         <span className="ml-auto text-[10px] text-muted-foreground font-medium">
-          Sem. {data.currentWeek}/{data.totalWeeks}
+          Día {data.currentDay}/{data.totalDays}
         </span>
       </div>
 
