@@ -8,6 +8,9 @@ import { BodyHeatmap } from '@/components/BodyHeatmap';
 import { FatigueHistory } from '@/components/FatigueHistory';
 import { AIInsightCard } from '@/components/AIInsightCard';
 import { supabase } from '@/integrations/supabase/client';
+import { useQuery } from '@tanstack/react-query';
+import { getProfile } from '@/lib/api';
+import { getAppFeatures } from '@/lib/ai-insights';
 import {
   computeFatigue,
   estimateRecoveryHours,
