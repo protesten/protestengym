@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
 import { LogOut, User } from 'lucide-react';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { toast } from 'sonner';
 
 export default function Profile() {
@@ -108,6 +109,21 @@ export default function Profile() {
           </Select>
         </div>
         <Button className="w-full rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => saveMutation.mutate()}>Guardar</Button>
+
+        {/* AI Profile Recommendations */}
+        <AIInsightCard
+          context="profile_recommendations"
+          data={{
+            displayName,
+            email: user?.email,
+            heightCm: heightCm || null,
+            birthDate: birthDate || null,
+            sex: sex || null,
+            units,
+          }}
+          cacheKey={`profile-${heightCm}-${birthDate}-${sex}`}
+          label="✨ Recomendaciones"
+        />
       </div>
 
       <AdminUserApproval />

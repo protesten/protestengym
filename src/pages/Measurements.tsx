@@ -16,6 +16,7 @@ import { MeasurementCard } from '@/components/measurements/MeasurementCard';
 import { FIELD_SECTIONS, ALL_FIELDS } from '@/components/measurements/fields';
 import { ChevronDown } from 'lucide-react';
 import { AnthropometricAnalysis } from '@/components/measurements/AnthropometricAnalysis';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { estimateBodyFatNavy } from '@/lib/body-fat';
 
 export default function Measurements() {
@@ -144,6 +145,21 @@ export default function Measurements() {
 
       {/* Anthropometric Analysis */}
       <AnthropometricAnalysis latestMeasurement={measurements?.[0] ?? null} />
+
+      {/* AI Body Insight */}
+      {measurements && measurements.length >= 2 && (
+        <AIInsightCard
+          context="measurement_insight"
+          data={{
+            latest: measurements[0],
+            previous: measurements[1],
+            count: measurements.length,
+            profile: { height_cm: (profile as any)?.height_cm, sex: (profile as any)?.sex },
+          }}
+          cacheKey={`measurements-${measurements[0]?.id}`}
+          label="✨ Analizar composición"
+        />
+      )}
 
       {/* Chart */}
       <MeasurementChart measurements={measurements} />

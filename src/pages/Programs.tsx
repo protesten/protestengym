@@ -18,6 +18,7 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { cn } from '@/lib/utils';
 import { ProgramHistory } from '@/components/ProgramHistory';
+import { AIInsightCard } from '@/components/AIInsightCard';
 
 interface Program {
   id: string;
@@ -348,6 +349,24 @@ export default function Programs() {
               );
             })}
           </div>
+
+          {/* AI Program Review */}
+          <AIInsightCard
+            context="program_review"
+            data={{
+              name: selectedProgram.name,
+              totalDays: selectedProgram.weeks,
+              deloadDay: selectedProgram.deload_week,
+              startDate: selectedProgram.start_date,
+              isActive: selectedProgram.is_active,
+              dayGroups: dayGroups.map(([num, entries]) => ({
+                day: num,
+                routines: entries.map(e => routines?.find(r => r.id === e.routine_id)?.name ?? 'Sin asignar'),
+              })),
+            }}
+            cacheKey={`program-${selectedProgramId}`}
+            label="✨ Evaluar programa"
+          />
         </div>
       ) : (
         <>

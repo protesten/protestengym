@@ -4,6 +4,7 @@ import { generateMonthlyReport, type MonthlyReport } from '@/db/monthly-report';
 import { exportElementAsImage, shareElementAsImage } from '@/lib/export-utils';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, ChevronLeft, ChevronRight, Download, Share2, Trophy, Dumbbell, Flame, TrendingUp, Calendar } from 'lucide-react';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { toast } from 'sonner';
 
 export default function MonthlyReportPage() {
@@ -110,6 +111,24 @@ export default function MonthlyReportPage() {
             {/* Watermark */}
             <p className="text-center text-[9px] text-muted-foreground/40 font-mono pt-2">GymTracker</p>
           </div>
+
+          {/* AI Narrative */}
+          <AIInsightCard
+            context="monthly_report_narrative"
+            data={{
+              month: report.month,
+              sessions: report.sessionCount,
+              volume: report.totalVolume,
+              sets: report.totalSets,
+              prs: report.prsBeaten,
+              avgPerWeek: report.avgSessionsPerWeek,
+              topMuscles: report.topMuscles,
+              weakMuscles: report.weakMuscles,
+              best1RMs: report.best1RMs,
+            }}
+            cacheKey={`report-${monthOffset}`}
+            label="✨ Narrativa del coach"
+          />
 
           {/* Action buttons */}
           <div className="flex gap-2 mt-4">

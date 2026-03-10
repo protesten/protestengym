@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Progress } from '@/components/ui/progress';
 import { BodyHeatmap } from '@/components/BodyHeatmap';
 import { FatigueHistory } from '@/components/FatigueHistory';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { supabase } from '@/integrations/supabase/client';
 import {
   computeFatigue,
@@ -253,6 +254,23 @@ export default function Fatigue() {
                 </div>
               </CardContent>
             </Card>
+          )}
+
+          {/* AI Fatigue Advice */}
+          {fatigue.size > 0 && (
+            <AIInsightCard
+              context="fatigue_advice"
+              data={{
+                muscles: Array.from(fatigue.entries()).map(([id, pct]) => ({
+                  name: muscleNames.get(id) ?? `#${id}`,
+                  fatigue: Math.round(pct),
+                  recovery: recoveryMap.get(id) ?? 'medium',
+                })),
+                avgFatigue: Math.round(Array.from(fatigue.values()).reduce((a, b) => a + b, 0) / fatigue.size),
+              }}
+              cacheKey="fatigue"
+              label="✨ Consejo de recuperación"
+            />
           )}
         </>
       )}

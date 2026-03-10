@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { format } from 'date-fns';
 import { toast } from 'sonner';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { Play, Zap } from 'lucide-react';
 
 export default function NewSession() {
@@ -37,8 +38,21 @@ export default function NewSession() {
 
   return (
     <div className="p-4 pb-20 max-w-lg mx-auto">
-      <h1 className="text-xl font-black mb-6">Nueva Sesión</h1>
-      <div className="space-y-4">
+      <h1 className="text-xl font-black mb-4">Nueva Sesión</h1>
+
+      {/* AI Suggestion */}
+      <AIInsightCard
+        context="new_session_suggestion"
+        data={{
+          routines: routines?.map(r => r.name) ?? [],
+          date,
+        }}
+        cacheKey={`new-session-${date}`}
+        compact
+        label="✨ ¿Qué entreno hoy?"
+      />
+
+      <div className="space-y-4 mt-4">
         <div>
           <Label className="text-xs font-semibold text-muted-foreground">Fecha</Label>
           <Input type="date" value={date} onChange={e => setDate(e.target.value)} className="rounded-lg bg-card border-border" />

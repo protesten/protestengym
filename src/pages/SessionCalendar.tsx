@@ -5,6 +5,7 @@ import { getSessions, deleteSession as deleteSessionApi } from '@/lib/api';
 import { Calendar } from '@/components/ui/calendar';
 import { Button } from '@/components/ui/button';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { ArrowLeft, Trash2, Pencil } from 'lucide-react';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -131,6 +132,22 @@ export default function SessionCalendar() {
               ))}
             </div>
           )}
+        </div>
+      )}
+
+      {/* AI Calendar Patterns */}
+      {sessions && sessions.length >= 5 && (
+        <div className="mt-4">
+          <AIInsightCard
+            context="calendar_patterns"
+            data={{
+              totalSessions: sessions.length,
+              dates: sessions.slice(0, 30).map(s => s.date),
+              completedCount: sessions.filter((s: any) => s.is_completed).length,
+            }}
+            cacheKey={`calendar-${sessions.length}`}
+            label="✨ Analizar patrones"
+          />
         </div>
       )}
     </div>

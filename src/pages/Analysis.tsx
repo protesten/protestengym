@@ -14,6 +14,7 @@ import { ComparisonRow } from '@/components/ComparisonRow';
 import { Progress } from '@/components/ui/progress';
 import { WeeklyMuscleVolume, OneRMPanel } from '@/components/AnalysisExtras';
 import { DateRangeSelector } from '@/components/DateRangeSelector';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid, BarChart, Bar } from 'recharts';
 import { Trophy, TrendingUp, BarChart3, ArrowUp, ArrowDown, Minus, Dumbbell, Activity, Clock, Ruler } from 'lucide-react';
 import { BodyEvolutionPanel } from '@/components/BodyEvolutionPanel';
@@ -195,6 +196,19 @@ export default function Analysis() {
               </div>
             </div>
           )}
+          {selectedExId && history.length > 0 && (
+            <AIInsightCard
+              context="exercise_analysis"
+              compact
+              data={{
+                exerciseName: selectedEx?.name,
+                trackingType: selectedEx?.tracking_type,
+                history: history.slice(0, 10).map(h => ({ date: h.date, metric: h.totalMetric, sets: h.sets.length })),
+                comparisons: exComps,
+              }}
+              cacheKey={`ex-${selectedExId}`}
+            />
+          )}
           {!selectedExId && <p className="text-center text-muted-foreground text-sm py-8">Selecciona un ejercicio</p>}
         </TabsContent>
 
@@ -224,6 +238,15 @@ export default function Analysis() {
                 </div>
               ))}
             </div>
+          )}
+          {muscleData.length > 0 && (
+            <AIInsightCard
+              context="routine_review"
+              compact
+              data={{ muscles: muscleData.map(m => ({ name: m.muscleName, strength: m.strength.current, isometric: m.isometric.current })) }}
+              cacheKey={`muscle-${musclePeriod}`}
+              label="✨ Evaluar volumen muscular"
+            />
           )}
         </TabsContent>
 
@@ -365,6 +388,15 @@ export default function Analysis() {
             })}
             {periodData.every(p => p.sessionCount === 0) && <p className="text-center text-muted-foreground text-sm py-8">Sin datos en este período</p>}
           </div>
+          )}
+          {periodData.some(p => p.sessionCount > 0) && (
+            <AIInsightCard
+              context="session_feedback"
+              compact
+              data={{ periods: periodData.slice(0, 4).map(p => ({ label: p.label, sessions: p.sessionCount, volume: p.strengthTotal, sets: p.totalWorkSets, rpe: p.avgRPE })) }}
+              cacheKey={`summary-${periodGranularity}`}
+              label="✨ Analizar tendencia"
+            />
           )}
         </TabsContent>
       </Tabs>

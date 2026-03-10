@@ -26,6 +26,7 @@ import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggesti
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { AIInsightCard } from '@/components/AIInsightCard';
 import { Plus, Trash2, ArrowLeft, ChevronUp, ChevronDown, CalendarIcon, Share2, Video, MoreHorizontal, Copy, Download, CheckCircle2, Flag } from 'lucide-react';
 import { exportElementAsImage, shareElementAsImage, exportAsCSV } from '@/lib/export-utils';
 import { Progress } from '@/components/ui/progress';
@@ -679,6 +680,26 @@ export default function SessionDetail() {
           {summary.strengthTotal > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Fuerza total</span><span className="font-mono font-bold">{summary.strengthTotal.toLocaleString()}</span></div>}
           {summary.isometricTotal > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Isométricos</span><span className="font-mono font-bold">{Math.floor(summary.isometricTotal / 60)}m {summary.isometricTotal % 60}s</span></div>}
           {summary.cardioTime > 0 && <div className="flex justify-between text-xs"><span className="text-muted-foreground">Cardio</span><span className="font-mono font-bold">{Math.floor(summary.cardioTime / 60)}m{summary.cardioDistance > 0 ? ` · ${summary.cardioDistance}m` : ''}</span></div>}
+        </div>
+      )}
+
+      {/* AI Session Feedback */}
+      {(session as any).is_completed && summary && (
+        <div className="mt-3">
+          <AIInsightCard
+            context="session_feedback"
+            data={{
+              date: session.date,
+              strengthTotal: summary.strengthTotal,
+              isometricTotal: summary.isometricTotal,
+              cardioTime: summary.cardioTime,
+              exerciseCount: sessionExercises?.length ?? 0,
+              totalSets: allSets?.filter(s => s.set_type === 'work').length ?? 0,
+              avgRPE: allSets?.filter(s => s.rpe).reduce((sum, s) => sum + (s.rpe ?? 0), 0)! / Math.max(1, allSets?.filter(s => s.rpe).length ?? 1),
+            }}
+            cacheKey={`session-${sessionId}`}
+            label="✨ Feedback de sesión"
+          />
         </div>
       )}
 
