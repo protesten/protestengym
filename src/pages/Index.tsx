@@ -10,7 +10,7 @@ import { Play, Zap, Calendar, TrendingUp, Dumbbell, Trash2, CalendarDays, Pencil
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { deleteSession as deleteSessionApi } from '@/lib/api';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 const WEEKDAYS = ['L', 'M', 'X', 'J', 'V', 'S', 'D'];
 
@@ -27,6 +27,13 @@ export default function Index() {
 
   const displayName = profile?.display_name || 'Atleta';
   const firstName = displayName.split(' ')[0];
+
+  // Routine name map for recent sessions
+  const routineNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    routines?.forEach(r => map.set(r.id, r.name));
+    return map;
+  }, [routines]);
 
   // Weekly activity
   const now = new Date();
@@ -68,19 +75,33 @@ export default function Index() {
         <h1 className="text-2xl font-black tracking-tight">¡Hola, {firstName}! 💪</h1>
       </div>
 
+      {/* AI Daily Briefing — moved to top */}
+      <AIInsightCard
+        context="home_summary"
+        data={{
+          weekCount,
+          totalSessions,
+          weekVolume,
+          lastSessionDate: sessions?.[0]?.date ?? null,
+          weekDaysActive: weekDays.filter(d => d.active).map(d => d.label),
+        }}
+        cacheKey={`home-${new Date().toISOString().slice(0, 10)}`}
+        label="✨ Briefing diario"
+      />
+
       {/* Quick Stats */}
       <div className="grid grid-cols-3 gap-3">
         <div className="rounded-xl bg-card border border-border p-3 text-center">
           <div className="text-2xl font-black text-primary">{weekCount}</div>
-          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Esta semana</p>
+          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Esta semana</p>
         </div>
         <div className="rounded-xl bg-card border border-border p-3 text-center">
           <div className="text-2xl font-black text-foreground">{totalSessions}</div>
-          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Total sesiones</p>
+          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Total sesiones</p>
         </div>
         <div className="rounded-xl bg-card border border-border p-3 text-center">
           <div className="text-2xl font-black text-foreground">{weekVolume > 0 ? `${(weekVolume / 1000).toFixed(1)}k` : '0'}</div>
-          <p className="text-[10px] text-muted-foreground font-medium mt-0.5">Vol. semanal</p>
+          <p className="text-[11px] text-muted-foreground font-medium mt-0.5">Vol. semanal</p>
         </div>
       </div>
 
@@ -108,20 +129,6 @@ export default function Index() {
           ))}
         </div>
       </div>
-
-      {/* AI Daily Briefing */}
-      <AIInsightCard
-        context="home_summary"
-        data={{
-          weekCount,
-          totalSessions,
-          weekVolume,
-          lastSessionDate: sessions?.[0]?.date ?? null,
-          weekDaysActive: weekDays.filter(d => d.active).map(d => d.label),
-        }}
-        cacheKey={`home-${new Date().toISOString().slice(0, 10)}`}
-        label="✨ Briefing diario"
-      />
 
       {/* Today's Routine Suggestion */}
       <TodayRoutineSuggestion />
@@ -169,55 +176,61 @@ export default function Index() {
             </Link>
           </div>
           <div className="space-y-2">
-            {sessions.slice(0, 5).map(s => (
-              <div key={s.id} className="rounded-xl bg-card border border-border p-3 flex items-center justify-between gap-2">
-                <Link to={`/session/${s.id}`} className="flex-1 min-w-0">
-                  <div className="flex justify-between items-center">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-sm font-semibold">{s.date}</span>
-                      <span className="text-[10px] text-muted-foreground flex items-center gap-0.5">
-                        <Clock className="h-2.5 w-2.5" />
-                        {new Date(s.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+            {sessions.slice(0, 5).map(s => {
+              const routineName = s.routine_id ? routineNameMap.get(s.routine_id) : null;
+              return (
+                <div key={s.id} className="rounded-xl bg-card border border-border p-3 flex items-center justify-between gap-2">
+                  <Link to={`/session/${s.id}`} className="flex-1 min-w-0">
+                    <div className="flex justify-between items-center gap-2">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <span className="text-sm font-semibold shrink-0">{s.date}</span>
+                        <span className="text-[11px] text-muted-foreground flex items-center gap-0.5 shrink-0">
+                          <Clock className="h-2.5 w-2.5" />
+                          {new Date(s.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full shrink-0 ${(s as any).is_completed ? 'bg-green-500/15 text-green-500' : 'bg-yellow-500/15 text-yellow-500'}`}>
+                        {(s as any).is_completed ? '✓' : 'Pend.'}
                       </span>
                     </div>
-                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${(s as any).is_completed ? 'bg-green-500/15 text-green-500' : 'bg-yellow-500/15 text-yellow-500'}`}>
-                      {(s as any).is_completed ? '✓ Completada' : 'Pendiente'}
-                    </span>
-                  </div>
-                  {s.notes && <p className="text-xs text-muted-foreground truncate mt-0.5">{s.notes.slice(0, 40)}</p>}
-                </Link>
-                <Link to={`/session/${s.id}`}>
-                  <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary">
-                    <Pencil className="h-3.5 w-3.5" />
-                  </Button>
-                </Link>
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive">
-                      <Trash2 className="h-3.5 w-3.5" />
+                    {routineName && (
+                      <p className="text-xs text-primary/80 font-medium truncate mt-0.5">{routineName}</p>
+                    )}
+                    {s.notes && <p className="text-xs text-muted-foreground truncate mt-0.5">{s.notes.slice(0, 40)}</p>}
+                  </Link>
+                  <Link to={`/session/${s.id}`}>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-muted-foreground hover:text-primary">
+                      <Pencil className="h-3.5 w-3.5" />
                     </Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent className="bg-card border-border rounded-2xl">
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
-                      <AlertDialogDescription>Se borrarán todos los ejercicios y series. No se puede deshacer.</AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-destructive text-destructive-foreground"
-                        onClick={async () => {
-                          await deleteSessionApi(s.id);
-                          queryClient.invalidateQueries({ queryKey: ['sessions'] });
-                        }}
-                      >
-                        Eliminar
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
-              </div>
-            ))}
+                  </Link>
+                  <AlertDialog>
+                    <AlertDialogTrigger asChild>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0 text-destructive">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </Button>
+                    </AlertDialogTrigger>
+                    <AlertDialogContent className="bg-card border-border rounded-2xl">
+                      <AlertDialogHeader>
+                        <AlertDialogTitle>¿Eliminar sesión?</AlertDialogTitle>
+                        <AlertDialogDescription>Se borrarán todos los ejercicios y series. No se puede deshacer.</AlertDialogDescription>
+                      </AlertDialogHeader>
+                      <AlertDialogFooter>
+                        <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                        <AlertDialogAction
+                          className="bg-destructive text-destructive-foreground"
+                          onClick={async () => {
+                            await deleteSessionApi(s.id);
+                            queryClient.invalidateQueries({ queryKey: ['sessions'] });
+                          }}
+                        >
+                          Eliminar
+                        </AlertDialogAction>
+                      </AlertDialogFooter>
+                    </AlertDialogContent>
+                  </AlertDialog>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

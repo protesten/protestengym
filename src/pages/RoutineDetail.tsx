@@ -39,33 +39,30 @@ function PlannedSetRow({ ps, index, trackingType, onChange, onDelete }: { ps: Pl
         <SelectContent>{RPE_OPTIONS.map(r => <SelectItem key={r} value={r.toString()}>RPE {r}</SelectItem>)}</SelectContent>
       </Select>
 
-      {/* Reps fields for weight_reps and reps_only */}
       {(trackingType === 'weight_reps' || trackingType === 'reps_only') && (
         <>
           <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_reps ?? ''} onChange={e => onChange({ ...ps, min_reps: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-xs text-muted-foreground">-</span>
           <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_reps ?? ''} onChange={e => onChange({ ...ps, max_reps: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[10px] text-muted-foreground">reps</span>
+          <span className="text-[11px] text-muted-foreground">reps</span>
         </>
       )}
 
-      {/* Time fields for time_only and distance_time */}
       {(trackingType === 'time_only' || trackingType === 'distance_time') && (
         <>
           <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_time_seconds ?? ''} onChange={e => onChange({ ...ps, min_time_seconds: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-xs text-muted-foreground">-</span>
           <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_time_seconds ?? ''} onChange={e => onChange({ ...ps, max_time_seconds: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[10px] text-muted-foreground">seg</span>
+          <span className="text-[11px] text-muted-foreground">seg</span>
         </>
       )}
 
-      {/* Distance fields for distance_time */}
       {trackingType === 'distance_time' && (
         <>
           <Input type="number" inputMode="numeric" placeholder="min" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.min_distance_meters ?? ''} onChange={e => onChange({ ...ps, min_distance_meters: e.target.value ? Number(e.target.value) : null })} />
           <span className="text-xs text-muted-foreground">-</span>
           <Input type="number" inputMode="numeric" placeholder="max" className="w-14 h-7 text-xs rounded-md bg-card border-border" value={ps.max_distance_meters ?? ''} onChange={e => onChange({ ...ps, max_distance_meters: e.target.value ? Number(e.target.value) : null })} />
-          <span className="text-[10px] text-muted-foreground">m</span>
+          <span className="text-[11px] text-muted-foreground">m</span>
         </>
       )}
 
@@ -135,7 +132,27 @@ export default function RoutineDetail() {
       <button onClick={() => navigate('/routines')} className="flex items-center gap-1 text-muted-foreground mb-4 text-sm font-medium hover:text-foreground transition-colors">
         <ArrowLeft className="h-4 w-4" />Volver
       </button>
-      <h1 className="text-xl font-black mb-2">{routine.name}</h1>
+      <h1 className="text-xl font-black mb-2 truncate">{routine.name}</h1>
+
+      {/* AI Routine Review — moved to top */}
+      {routineExercises && routineExercises.length >= 2 && (
+        <div className="mb-4">
+          <AIInsightCard
+            context="routine_review"
+            data={{
+              routineName: routine.name,
+              trainingGoal: currentGoal,
+              exercises: routineExercises.map(re => ({
+                name: exercises?.find(e => e.id === re.exercise_id)?.name ?? 'Desconocido',
+                muscles: exercises?.find(e => e.id === re.exercise_id)?.primary_muscle_ids ?? [],
+                setsCount: getPlannedSets(re).length,
+              })),
+            }}
+            cacheKey={`routine-${routineId}-${routineExercises.length}`}
+            label="✨ Evaluar rutina"
+          />
+        </div>
+      )}
 
       {/* Training goal selector */}
       <div className="flex gap-1.5 mb-4">
@@ -163,7 +180,7 @@ export default function RoutineDetail() {
             <div key={re.id} className="p-3 rounded-xl bg-card border border-border">
               <div className="flex items-center gap-2">
                 <span className="text-xs text-primary font-black w-6">{i + 1}</span>
-                <span className="flex-1 text-sm font-bold">{exName(re.exercise_id)}</span>
+                <span className="flex-1 text-sm font-bold truncate">{exName(re.exercise_id)}</span>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveMutation.mutate({ reId: re.id, direction: -1 })} disabled={i === 0}><ArrowUp className="h-3 w-3" /></Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => moveMutation.mutate({ reId: re.id, direction: 1 })} disabled={i === (routineExercises?.length ?? 0) - 1}><ArrowDown className="h-3 w-3" /></Button>
                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => removeMutation.mutate(re.id)}><Trash2 className="h-3 w-3 text-destructive" /></Button>
@@ -181,26 +198,6 @@ export default function RoutineDetail() {
         })}
         {(!routineExercises || routineExercises.length === 0) && <p className="text-center text-muted-foreground text-sm py-8">Sin ejercicios aún</p>}
       </div>
-
-      {/* AI Routine Review */}
-      {routineExercises && routineExercises.length >= 2 && (
-        <div className="mt-4">
-          <AIInsightCard
-            context="routine_review"
-            data={{
-              routineName: routine.name,
-              trainingGoal: currentGoal,
-              exercises: routineExercises.map(re => ({
-                name: exercises?.find(e => e.id === re.exercise_id)?.name ?? 'Desconocido',
-                muscles: exercises?.find(e => e.id === re.exercise_id)?.primary_muscle_ids ?? [],
-                setsCount: getPlannedSets(re).length,
-              })),
-            }}
-            cacheKey={`routine-${routineId}-${routineExercises.length}`}
-            label="✨ Evaluar rutina"
-          />
-        </div>
-      )}
     </div>
   );
 }

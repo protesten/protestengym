@@ -71,11 +71,21 @@ Si todos están en zona verde, sigue el programa. Si todos están en rojo, sugie
 Máximo 3 frases.`,
 };
 
+const TONE_MODIFIERS: Record<string, string> = {
+  technical: "Usa terminología técnica de entrenamiento (periodización, MEV/MAV/MRV, RPE, hipertrofia, etc.). Asume que el usuario entiende conceptos avanzados.",
+  casual: "Explica como si hablaras con un amigo que no sabe mucho de entrenamiento. Evita jerga técnica. Usa ejemplos cotidianos y lenguaje sencillo.",
+};
+
+const MOOD_MODIFIERS: Record<string, string> = {
+  motivator: "Sé animador, positivo y entusiasta. Usa emojis ocasionalmente. Celebra los logros y motiva ante los retos. Transmite energía.",
+  focused: "Sé directo, conciso y profesional. Sin adornos ni emojis. Solo datos, análisis y acciones concretas.",
+};
+
 serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: corsHeaders });
 
   try {
-    const { context, data } = await req.json();
+    const { context, data, tone, mood } = await req.json();
     const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
     if (!LOVABLE_API_KEY) throw new Error("LOVABLE_API_KEY is not configured");
 
@@ -86,6 +96,11 @@ serve(async (req) => {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    // Build full system prompt with tone and mood modifiers
+    const toneModifier = TONE_MODIFIERS[tone] ?? "";
+    const moodModifier = MOOD_MODIFIERS[mood] ?? "";
+    const fullSystemPrompt = [toneModifier, moodModifier, systemPrompt].filter(Boolean).join("\n\n");
 
     const userPrompt = `Aquí están los datos relevantes:\n\n${JSON.stringify(data, null, 2)}\n\nDame tu análisis conciso en español.`;
 
@@ -98,7 +113,7 @@ serve(async (req) => {
       body: JSON.stringify({
         model: "google/gemini-3-flash-preview",
         messages: [
-          { role: "system", content: systemPrompt },
+          { role: "system", content: fullSystemPrompt },
           { role: "user", content: userPrompt },
         ],
       }),

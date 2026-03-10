@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Calendar as CalendarComponent } from '@/components/ui/calendar';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
-import { Calendar, CalendarIcon, Plus, Trash2, CheckCircle, ChevronRight } from 'lucide-react';
+import { Calendar, CalendarIcon, Plus, Trash2, CheckCircle, ChevronRight, Pencil } from 'lucide-react';
 import { toast } from 'sonner';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -49,6 +49,9 @@ export default function Programs() {
   const [deloadWeek, setDeloadWeek] = useState('');
   const [startDate, setStartDate] = useState<Date>(new Date());
   const [selectedProgramId, setSelectedProgramId] = useState<string | null>(null);
+  const [editingProgram, setEditingProgram] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editDeload, setEditDeload] = useState('');
 
   const { data: programs } = useQuery({
     queryKey: ['programs'],
@@ -72,7 +75,6 @@ export default function Programs() {
     enabled: !!selectedProgramId,
   });
 
-  // Group program weeks by day number
   const dayGroups = useMemo(() => {
     if (!programWeeks) return [];
     const map = new Map<number, ProgramWeek[]>();
@@ -94,7 +96,6 @@ export default function Programs() {
         .insert({ user_id: user.id, name, weeks: numWeeks, deload_week: dl, start_date: format(startDate, 'yyyy-MM-dd') } as any)
         .select().single();
       if (error) throw error;
-      // Create one entry per day (no routine assigned yet)
       const weekRows = Array.from({ length: numWeeks }, (_, i) => ({
         program_id: (prog as any).id,
         week_number: i + 1,
@@ -143,10 +144,8 @@ export default function Programs() {
 
   const removeRoutineEntryMutation = useMutation({
     mutationFn: async ({ weekId, weekNumber }: { weekId: string; weekNumber: number }) => {
-      // Don't allow removing the last entry for a day
       const dayEntries = programWeeks?.filter(pw => pw.week_number === weekNumber) ?? [];
       if (dayEntries.length <= 1) {
-        // Just clear the routine_id instead
         const { error } = await supabase.from('program_weeks').update({ routine_id: null }).eq('id', weekId);
         if (error) throw error;
         return;
@@ -199,6 +198,59 @@ export default function Programs() {
     },
   });
 
+  const updateProgramMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProgramId) return;
+      const dl = editDeload.trim() ? Number(editDeload) : null;
+      const { error } = await supabase.from('programs').update({ name: editName, deload_week: dl }).eq('id', selectedProgramId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      setEditingProgram(false);
+      toast.success('Programa actualizado');
+    },
+  });
+
+  const addDayMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProgramId || !selectedProgram) return;
+      const newDayNumber = (dayGroups.length > 0 ? Math.max(...dayGroups.map(([n]) => n)) : 0) + 1;
+      const { error: weekErr } = await supabase.from('program_weeks').insert({
+        program_id: selectedProgramId,
+        week_number: newDayNumber,
+        order_index: 0,
+      });
+      if (weekErr) throw weekErr;
+      const { error: progErr } = await supabase.from('programs').update({ weeks: selectedProgram.weeks + 1 }).eq('id', selectedProgramId);
+      if (progErr) throw progErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program_weeks', selectedProgramId] });
+      toast.success('Día añadido');
+    },
+  });
+
+  const removeDayMutation = useMutation({
+    mutationFn: async () => {
+      if (!selectedProgramId || !selectedProgram || dayGroups.length <= 1) return;
+      const lastDay = dayGroups[dayGroups.length - 1];
+      const [dayNum, entries] = lastDay;
+      for (const entry of entries) {
+        const { error } = await supabase.from('program_weeks').delete().eq('id', entry.id);
+        if (error) throw error;
+      }
+      const { error: progErr } = await supabase.from('programs').update({ weeks: selectedProgram.weeks - 1 }).eq('id', selectedProgramId);
+      if (progErr) throw progErr;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['programs'] });
+      queryClient.invalidateQueries({ queryKey: ['program_weeks', selectedProgramId] });
+      toast.success('Día eliminado');
+    },
+  });
+
   const selectedProgram = programs?.find(p => p.id === selectedProgramId);
 
   return (
@@ -211,24 +263,74 @@ export default function Programs() {
       {/* Detail view */}
       {selectedProgram && programWeeks ? (
         <div className="space-y-3">
-          <button onClick={() => setSelectedProgramId(null)} className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
+          <button onClick={() => { setSelectedProgramId(null); setEditingProgram(false); }} className="text-sm text-muted-foreground hover:text-foreground transition-colors flex items-center gap-1">
             ← Volver
           </button>
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-lg font-bold">{selectedProgram.name}</h2>
-              <p className="text-xs text-muted-foreground">{selectedProgram.weeks} días{selectedProgram.deload_week ? ` · Deload día ${selectedProgram.deload_week}` : ''}</p>
+
+          {/* AI Program Review — moved to top */}
+          <AIInsightCard
+            context="program_review"
+            data={{
+              name: selectedProgram.name,
+              totalDays: selectedProgram.weeks,
+              deloadDay: selectedProgram.deload_week,
+              startDate: selectedProgram.start_date,
+              isActive: selectedProgram.is_active,
+              dayGroups: dayGroups.map(([num, entries]) => ({
+                day: num,
+                routines: entries.map(e => routines?.find(r => r.id === e.routine_id)?.name ?? 'Sin asignar'),
+              })),
+            }}
+            cacheKey={`program-${selectedProgramId}`}
+            label="✨ Evaluar programa"
+          />
+
+          {editingProgram ? (
+            <div className="p-3 rounded-xl bg-card border border-border space-y-3">
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground">Nombre</Label>
+                <Input value={editName} onChange={e => setEditName(e.target.value)} className="rounded-lg bg-secondary/50 border-border" />
+              </div>
+              <div>
+                <Label className="text-xs font-semibold text-muted-foreground">Día deload (opc.)</Label>
+                <Input inputMode="numeric" value={editDeload} onChange={e => setEditDeload(e.target.value)} placeholder="Ej: 4" className="rounded-lg bg-secondary/50 border-border" />
+              </div>
+              <div className="flex gap-2">
+                <Button className="flex-1 rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => updateProgramMutation.mutate()} disabled={!editName.trim()}>Guardar</Button>
+                <Button variant="ghost" onClick={() => setEditingProgram(false)}>Cancelar</Button>
+              </div>
             </div>
-            <Button
-              variant={selectedProgram.is_active ? 'default' : 'outline'}
-              size="sm"
-              className={selectedProgram.is_active ? 'gradient-primary text-primary-foreground border-0 rounded-lg' : 'rounded-lg'}
-              onClick={() => toggleActiveMutation.mutate(selectedProgram.id)}
-            >
-              <CheckCircle className="h-3.5 w-3.5 mr-1" />
-              {selectedProgram.is_active ? 'Activo' : 'Activar'}
-            </Button>
-          </div>
+          ) : (
+            <div className="flex items-center justify-between">
+              <div className="min-w-0">
+                <h2 className="text-lg font-bold truncate">{selectedProgram.name}</h2>
+                <p className="text-xs text-muted-foreground">{selectedProgram.weeks} días{selectedProgram.deload_week ? ` · Deload día ${selectedProgram.deload_week}` : ''}</p>
+              </div>
+              <div className="flex items-center gap-1 shrink-0">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
+                  onClick={() => {
+                    setEditName(selectedProgram.name);
+                    setEditDeload(selectedProgram.deload_week?.toString() ?? '');
+                    setEditingProgram(true);
+                  }}
+                >
+                  <Pencil className="h-3.5 w-3.5 text-primary" />
+                </Button>
+                <Button
+                  variant={selectedProgram.is_active ? 'default' : 'outline'}
+                  size="sm"
+                  className={selectedProgram.is_active ? 'gradient-primary text-primary-foreground border-0 rounded-lg' : 'rounded-lg'}
+                  onClick={() => toggleActiveMutation.mutate(selectedProgram.id)}
+                >
+                  <CheckCircle className="h-3.5 w-3.5 mr-1" />
+                  <span className="truncate">{selectedProgram.is_active ? 'Activo' : 'Activar'}</span>
+                </Button>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-2">
             <Label className="text-xs font-semibold text-muted-foreground whitespace-nowrap">Inicio:</Label>
@@ -236,9 +338,11 @@ export default function Programs() {
               <PopoverTrigger asChild>
                 <Button variant="outline" size="sm" className="h-8 text-xs rounded-lg bg-secondary/50 border-border justify-start font-normal">
                   <CalendarIcon className="mr-1.5 h-3.5 w-3.5" />
-                  {selectedProgram.start_date
-                    ? format(new Date(selectedProgram.start_date + 'T00:00:00'), "PPP", { locale: es })
-                    : 'Sin fecha'}
+                  <span className="truncate">
+                    {selectedProgram.start_date
+                      ? format(new Date(selectedProgram.start_date + 'T00:00:00'), "PPP", { locale: es })
+                      : 'Sin fecha'}
+                  </span>
                 </Button>
               </PopoverTrigger>
               <PopoverContent className="w-auto p-0" align="start">
@@ -291,13 +395,13 @@ export default function Programs() {
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-xs font-bold">
                       Día {dayNumber}
-                      {isCurrent && <span className="ml-2 text-[10px] text-primary font-semibold">← ACTUAL</span>}
-                      {isDeload && <span className="ml-2 text-[10px] text-yellow-500 font-semibold">DELOAD</span>}
+                      {isCurrent && <span className="ml-2 text-[11px] text-primary font-semibold">← ACTUAL</span>}
+                      {isDeload && <span className="ml-2 text-[11px] text-yellow-500 font-semibold">DELOAD</span>}
                     </span>
                   </div>
 
                   <div className="space-y-1.5">
-                    {entries.map((pw, idx) => {
+                    {entries.map((pw) => {
                       const routine = routines?.find(r => r.id === pw.routine_id);
                       return (
                         <div key={pw.id} className="flex items-center gap-1.5">
@@ -305,7 +409,7 @@ export default function Programs() {
                             value={pw.routine_id ?? ''}
                             onValueChange={v => assignRoutineMutation.mutate({ weekId: pw.id, routineId: v || null })}
                           >
-                            <SelectTrigger className="h-8 text-xs rounded-lg bg-secondary/50 border-border flex-1">
+                            <SelectTrigger className="h-8 text-xs rounded-lg bg-secondary/50 border-border flex-1 min-w-0">
                               <SelectValue placeholder="Asignar rutina..." />
                             </SelectTrigger>
                             <SelectContent>
@@ -340,7 +444,7 @@ export default function Programs() {
                   <Button
                     variant="outline"
                     size="sm"
-                    className="mt-1.5 w-full text-[10px] h-6 rounded-lg border-dashed border-border hover:border-primary/30"
+                    className="mt-1.5 w-full text-[11px] h-6 rounded-lg border-dashed border-border hover:border-primary/30"
                     onClick={() => addRoutineToDayMutation.mutate(dayNumber)}
                   >
                     <Plus className="h-3 w-3 mr-1" />Añadir rutina
@@ -350,23 +454,15 @@ export default function Programs() {
             })}
           </div>
 
-          {/* AI Program Review */}
-          <AIInsightCard
-            context="program_review"
-            data={{
-              name: selectedProgram.name,
-              totalDays: selectedProgram.weeks,
-              deloadDay: selectedProgram.deload_week,
-              startDate: selectedProgram.start_date,
-              isActive: selectedProgram.is_active,
-              dayGroups: dayGroups.map(([num, entries]) => ({
-                day: num,
-                routines: entries.map(e => routines?.find(r => r.id === e.routine_id)?.name ?? 'Sin asignar'),
-              })),
-            }}
-            cacheKey={`program-${selectedProgramId}`}
-            label="✨ Evaluar programa"
-          />
+          {/* Add/remove day buttons */}
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" className="flex-1 rounded-lg text-xs" onClick={() => addDayMutation.mutate()}>
+              <Plus className="h-3 w-3 mr-1" />Añadir día
+            </Button>
+            <Button variant="outline" size="sm" className="flex-1 rounded-lg text-xs border-destructive/30 text-destructive hover:bg-destructive/10" onClick={() => removeDayMutation.mutate()} disabled={dayGroups.length <= 1}>
+              <Trash2 className="h-3 w-3 mr-1" />Quitar último día
+            </Button>
+          </div>
         </div>
       ) : (
         <>
@@ -427,14 +523,14 @@ export default function Programs() {
           <div className="space-y-2">
             {(programs ?? []).map(p => (
               <div key={p.id} className="p-3 rounded-xl bg-card border border-border flex items-center justify-between">
-                <button onClick={() => setSelectedProgramId(p.id)} className="flex-1 text-left">
+                <button onClick={() => setSelectedProgramId(p.id)} className="flex-1 text-left min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="text-sm font-bold">{p.name}</span>
-                    {p.is_active && <span className="text-[10px] font-semibold gradient-primary text-primary-foreground px-2 py-0.5 rounded-full">Activo</span>}
+                    <span className="text-sm font-bold truncate">{p.name}</span>
+                    {p.is_active && <span className="text-[11px] font-semibold gradient-primary text-primary-foreground px-2 py-0.5 rounded-full shrink-0">Activo</span>}
                   </div>
                   <p className="text-xs text-muted-foreground">{p.weeks} días{p.deload_week ? ` · Deload día ${p.deload_week}` : ''}</p>
                 </button>
-                <div className="flex items-center gap-1">
+                <div className="flex items-center gap-1 shrink-0">
                   <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   <AlertDialog>
                     <AlertDialogTrigger asChild>

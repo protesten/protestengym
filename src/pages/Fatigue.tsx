@@ -152,6 +152,22 @@ export default function Fatigue() {
         </h1>
       </div>
 
+      {!loading && fatigue.size > 0 && (
+        <AIInsightCard
+          context="fatigue_advice"
+          data={{
+            muscles: Array.from(fatigue.entries()).map(([id, pct]) => ({
+              name: muscleNames.get(id) ?? `#${id}`,
+              fatigue: Math.round(pct),
+              recovery: recoveryMap.get(id) ?? 'medium',
+            })),
+            avgFatigue: Math.round(Array.from(fatigue.values()).reduce((a, b) => a + b, 0) / fatigue.size),
+          }}
+          cacheKey="fatigue"
+          label="✨ Consejo de recuperación"
+        />
+      )}
+
       {loading ? (
         <div className="space-y-4">
           <Skeleton className="h-[300px] w-full rounded-xl" />
@@ -189,7 +205,6 @@ export default function Fatigue() {
             </CardContent>
           </Card>
 
-          {/* Weekly Fatigue History Chart */}
           <FatigueHistory sessions={sessionDataArr} muscleNames={muscleNames} recoveryMap={recoveryMap} />
 
           <Card>
@@ -209,14 +224,14 @@ export default function Fatigue() {
                     return (
                       <div key={id} className="space-y-1">
                         <div className="flex items-center justify-between">
-                          <span className="text-sm font-medium">{muscleNames.get(id) ?? `Músculo ${id}`}</span>
-                          <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium truncate">{muscleNames.get(id) ?? `Músculo ${id}`}</span>
+                          <div className="flex items-center gap-2 shrink-0">
                             <span className="text-xs font-bold" style={{ color: fatigueColor(pct) }}>
                               {Math.round(pct)}%
                             </span>
                             <div className="flex items-center gap-1 text-muted-foreground">
                               <Clock className="h-3 w-3" />
-                              <span className="text-[10px]">{hours}h</span>
+                              <span className="text-[11px]">{hours}h</span>
                             </div>
                           </div>
                         </div>
@@ -243,10 +258,10 @@ export default function Fatigue() {
                   {Array.from(fatigue.entries())
                     .sort((a, b) => b[1] - a[1])
                     .map(([id, pct]) => (
-                      <div key={id} className="flex items-center gap-2">
+                      <div key={id} className="flex items-center gap-2 min-w-0">
                         <div className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: fatigueColor(pct) }} />
                         <span className="text-xs truncate">{muscleNames.get(id) ?? `#${id}`}</span>
-                        <span className="text-xs font-bold ml-auto" style={{ color: fatigueColor(pct) }}>
+                        <span className="text-xs font-bold ml-auto shrink-0" style={{ color: fatigueColor(pct) }}>
                           {Math.round(pct)}%
                         </span>
                       </div>
@@ -254,23 +269,6 @@ export default function Fatigue() {
                 </div>
               </CardContent>
             </Card>
-          )}
-
-          {/* AI Fatigue Advice */}
-          {fatigue.size > 0 && (
-            <AIInsightCard
-              context="fatigue_advice"
-              data={{
-                muscles: Array.from(fatigue.entries()).map(([id, pct]) => ({
-                  name: muscleNames.get(id) ?? `#${id}`,
-                  fatigue: Math.round(pct),
-                  recovery: recoveryMap.get(id) ?? 'medium',
-                })),
-                avgFatigue: Math.round(Array.from(fatigue.values()).reduce((a, b) => a + b, 0) / fatigue.size),
-              }}
-              cacheKey="fatigue"
-              label="✨ Consejo de recuperación"
-            />
           )}
         </>
       )}

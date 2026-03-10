@@ -44,19 +44,38 @@ export default function MonthlyReportPage() {
         </div>
       </div>
 
+      {/* AI Narrative — moved to top */}
+      {!loading && report && (
+        <div className="mb-4">
+          <AIInsightCard
+            context="monthly_report_narrative"
+            data={{
+              month: report.month,
+              sessions: report.sessionCount,
+              volume: report.totalVolume,
+              sets: report.totalSets,
+              prs: report.prsBeaten,
+              avgPerWeek: report.avgSessionsPerWeek,
+              topMuscles: report.topMuscles,
+              weakMuscles: report.weakMuscles,
+              best1RMs: report.best1RMs,
+            }}
+            cacheKey={`report-${monthOffset}`}
+            label="✨ Narrativa del coach"
+          />
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center text-muted-foreground py-12">Generando informe...</div>
       ) : report ? (
         <>
-          {/* Exportable card */}
           <div ref={cardRef} className="rounded-2xl bg-card border border-border p-5 space-y-4">
-            {/* Header */}
             <div className="text-center">
               <p className="text-xs text-muted-foreground uppercase tracking-widest font-semibold">Informe Mensual</p>
               <h2 className="text-2xl font-black capitalize text-primary mt-1">{report.month}</h2>
             </div>
 
-            {/* Stats grid */}
             <div className="grid grid-cols-2 gap-3">
               <StatBox icon={<Calendar className="h-4 w-4" />} label="Sesiones" value={report.sessionCount.toString()} />
               <StatBox icon={<Dumbbell className="h-4 w-4" />} label="Volumen total" value={`${(report.totalVolume / 1000).toFixed(1)}t`} />
@@ -64,13 +83,11 @@ export default function MonthlyReportPage() {
               <StatBox icon={<Trophy className="h-4 w-4" />} label="PRs batidos" value={report.prsBeaten.toString()} accent />
             </div>
 
-            {/* Frequency */}
             <div className="bg-secondary/30 rounded-xl p-3">
               <p className="text-xs text-muted-foreground mb-1">Frecuencia</p>
               <p className="text-sm font-bold">{report.avgSessionsPerWeek} sesiones/semana · {report.streakWeeks} semanas activas</p>
             </div>
 
-            {/* Top muscles */}
             {report.topMuscles.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-2 font-semibold">💪 Músculos más trabajados</p>
@@ -93,7 +110,6 @@ export default function MonthlyReportPage() {
               </div>
             )}
 
-            {/* Best 1RMs */}
             {report.best1RMs.length > 0 && (
               <div>
                 <p className="text-xs text-muted-foreground mb-2 font-semibold flex items-center gap-1"><TrendingUp className="h-3 w-3" /> Mejores 1RM estimados</p>
@@ -101,36 +117,16 @@ export default function MonthlyReportPage() {
                   {report.best1RMs.map((r, i) => (
                     <div key={i} className="flex justify-between text-sm">
                       <span className="text-muted-foreground truncate">{r.exercise}</span>
-                      <span className="font-mono font-black text-primary">{r.value} kg</span>
+                      <span className="font-mono font-black text-primary shrink-0">{r.value} kg</span>
                     </div>
                   ))}
                 </div>
               </div>
             )}
 
-            {/* Watermark */}
             <p className="text-center text-[9px] text-muted-foreground/40 font-mono pt-2">GymTracker</p>
           </div>
 
-          {/* AI Narrative */}
-          <AIInsightCard
-            context="monthly_report_narrative"
-            data={{
-              month: report.month,
-              sessions: report.sessionCount,
-              volume: report.totalVolume,
-              sets: report.totalSets,
-              prs: report.prsBeaten,
-              avgPerWeek: report.avgSessionsPerWeek,
-              topMuscles: report.topMuscles,
-              weakMuscles: report.weakMuscles,
-              best1RMs: report.best1RMs,
-            }}
-            cacheKey={`report-${monthOffset}`}
-            label="✨ Narrativa del coach"
-          />
-
-          {/* Action buttons */}
           <div className="flex gap-2 mt-4">
             <Button className="flex-1 gradient-primary text-primary-foreground border-0 rounded-xl" onClick={handleDownload}>
               <Download className="h-4 w-4 mr-2" />Descargar imagen

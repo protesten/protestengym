@@ -36,7 +36,6 @@ export default function SessionCalendar() {
     },
   });
 
-  // Highlight days that have sessions
   const modifiers = useMemo(() => ({
     hasSession: (date: Date) => sessionDates.has(format(date, 'yyyy-MM-dd')),
   }), [sessionDates]);
@@ -57,6 +56,22 @@ export default function SessionCalendar() {
       </button>
 
       <h1 className="text-xl font-black mb-4">Calendario de Sesiones</h1>
+
+      {/* AI Calendar Patterns — moved to top */}
+      {sessions && sessions.length >= 5 && (
+        <div className="mb-4">
+          <AIInsightCard
+            context="calendar_patterns"
+            data={{
+              totalSessions: sessions.length,
+              dates: sessions.slice(0, 30).map(s => s.date),
+              completedCount: sessions.filter((s: any) => s.is_completed).length,
+            }}
+            cacheKey={`calendar-${sessions.length}`}
+            label="✨ Analizar patrones"
+          />
+        </div>
+      )}
 
       <div className="rounded-xl bg-card border border-border p-2 mb-4">
         <Calendar
@@ -98,7 +113,7 @@ export default function SessionCalendar() {
                       <span className="text-sm font-semibold">
                         {new Date(s.created_at).toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' })}
                       </span>
-                      <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${(s as any).is_completed ? 'bg-green-500/15 text-green-500' : 'bg-yellow-500/15 text-yellow-500'}`}>
+                      <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full ${(s as any).is_completed ? 'bg-green-500/15 text-green-500' : 'bg-yellow-500/15 text-yellow-500'}`}>
                         {(s as any).is_completed ? '✓' : 'Pend.'}
                       </span>
                     </div>
@@ -132,22 +147,6 @@ export default function SessionCalendar() {
               ))}
             </div>
           )}
-        </div>
-      )}
-
-      {/* AI Calendar Patterns */}
-      {sessions && sessions.length >= 5 && (
-        <div className="mt-4">
-          <AIInsightCard
-            context="calendar_patterns"
-            data={{
-              totalSessions: sessions.length,
-              dates: sessions.slice(0, 30).map(s => s.date),
-              completedCount: sessions.filter((s: any) => s.is_completed).length,
-            }}
-            cacheKey={`calendar-${sessions.length}`}
-            label="✨ Analizar patrones"
-          />
         </div>
       )}
     </div>
