@@ -406,3 +406,22 @@ export async function approveUser(profileId: string) {
     .eq('id', profileId);
   if (error) throw error;
 }
+
+// ============ Admin: User Management ============
+export async function getAdminUsers() {
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action: 'list_users' },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as (Profile & { email: string })[];
+}
+
+export async function transferUserData(sourceUserId: string, targetUserId: string, tables: string[]) {
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action: 'transfer_data', source_user_id: sourceUserId, target_user_id: targetUserId, tables },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as { success: boolean; summary: Record<string, number> };
+}

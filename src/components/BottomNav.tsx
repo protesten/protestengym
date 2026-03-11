@@ -41,8 +41,11 @@ export function BottomNav() {
   const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
 
   const moreItems = useMemo(() =>
-    allMoreItems.filter(item => item.featureKey === null || feat[item.featureKey]),
-    [feat]
+    allMoreItems.filter(item => {
+      if ((item as any).adminOnly && !admin) return false;
+      return item.featureKey === null || feat[item.featureKey];
+    }),
+    [feat, admin]
   );
 
   const moreActive = moreItems.some(({ to }) => pathname === to || (to !== '/' && pathname.startsWith(to)));
