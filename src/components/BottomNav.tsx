@@ -109,6 +109,11 @@ export function BottomNav() {
           >
             <div className={`relative ${moreOpen || moreActive ? 'drop-shadow-[0_0_6px_hsl(20_100%_60%/0.5)]' : ''}`}>
               {moreOpen ? <X className="h-5 w-5" /> : <MoreHorizontal className="h-5 w-5" />}
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+                  {pendingCount}
+                </span>
+              )}
             </div>
             <span className="text-[10px] font-semibold">Más</span>
           </button>
