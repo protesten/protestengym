@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import AdminUserApproval from '@/components/AdminUserApproval';
+
 import { useAuth } from '@/contexts/AuthContext';
 import { getProfile, updateProfile } from '@/lib/api';
 import { supabase } from '@/integrations/supabase/client';
