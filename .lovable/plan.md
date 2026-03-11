@@ -1,22 +1,47 @@
 
 
-## Plan: Corregir panel de administración y consolidar gestión de usuarios
+## Plan: Corrección de 4 problemas de seguridad restantes
 
-### Problema 1: "No hay usuarios" — Error en Edge Function
-La Edge Function `admin-users` usa `SUPABASE_PUBLISHABLE_KEY` que no existe en el entorno de Edge Functions. Las otras funciones usan `SUPABASE_ANON_KEY`. Este es el error en los logs: `supabaseKey is required`.
+### 1. HTML Injection en notificación admin (edge function)
+**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
 
-**Fix**: Cambiar `SUPABASE_PUBLISHABLE_KEY` por `SUPABASE_ANON_KEY` en `supabase/functions/admin-users/index.ts` (línea 23).
+Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
 
-### Problema 2: Consolidar "Usuarios pendientes" en el panel Admin
-Actualmente el componente `AdminUserApproval` se renderiza en la página de Perfil. Hay que moverlo al panel de administración y quitarlo de Perfil.
+### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
+**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
 
-### Cambios
+**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_approved_user()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND is_approved = true
+  );
+$$;
+```
+
+Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
+
+Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
+
+### 3. Error messages internos expuestos (3 edge functions)
+**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
+
+Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
+
+### 4. Leaked password protection
+Activar mediante la herramienta de configuración de autenticación.
+
+### Archivos afectados
 
 | Archivo | Cambio |
 |---|---|
-| `supabase/functions/admin-users/index.ts` | `SUPABASE_PUBLISHABLE_KEY` → `SUPABASE_ANON_KEY` |
-| `src/pages/Profile.tsx` | Eliminar import y uso de `AdminUserApproval` |
-| `src/pages/Admin.tsx` | Ya tiene gestión de usuarios con aprobación/eliminación — no necesita cambios adicionales, ya incluye esa funcionalidad integrada en la tabla |
-
-Re-deploy de la Edge Function tras el cambio.
+| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
+| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
+| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
+| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
+| Auth config | Leaked password protection |
 
