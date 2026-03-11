@@ -349,7 +349,7 @@ export default function Profile() {
         <Button className="w-full rounded-xl gradient-primary text-primary-foreground border-0 font-bold" onClick={() => saveMutation.mutate()}>Guardar</Button>
       </div>
 
-      <AdminUserApproval />
+      
 
       <div className="mt-8 pt-6 border-t border-border">
         <Button variant="outline" className="w-full rounded-xl border-destructive/30 text-destructive hover:bg-destructive/10" onClick={signOut}>
