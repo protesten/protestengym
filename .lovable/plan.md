@@ -1,60 +1,47 @@
 
 
-## Plan: Panel de Administración con Gestión de Usuarios e Importación/Exportación de Datos
+## Plan: Corrección de 4 problemas de seguridad restantes
 
-### 1. Nueva página de Administración (`src/pages/Admin.tsx`)
+### 1. HTML Injection en notificación admin (edge function)
+**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
 
-Página dedicada solo para admins con dos secciones principales:
+Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
 
-**A) Gestión de usuarios** - Tabla con todos los usuarios del sistema:
-- Columnas: Nombre, Email (del perfil), Estado (aprobado/pendiente), Fecha de registro, Acciones
-- Acciones por usuario: Aprobar, Rechazar/Eliminar, Ver datos
-- Mover aquí el componente `AdminUserApproval` existente o integrarlo en la tabla
+### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
+**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
 
-**B) Importar/Exportar datos entre cuentas** - Interfaz para transferir datos:
-- Seleccionar usuario origen y usuario destino
-- Seleccionar qué datos transferir: ejercicios, rutinas, sesiones (con sets), medidas corporales, programas
-- Botón de ejecutar transferencia
+**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
 
-### 2. Edge Function para operaciones admin (`supabase/functions/admin-users/index.ts`)
+```sql
+CREATE OR REPLACE FUNCTION public.is_approved_user()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND is_approved = true
+  );
+$$;
+```
 
-Ampliar la Edge Function existente con nuevas acciones:
+Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
 
-- `action: "list_users"` — Listar todos los perfiles (con email de auth.users via service role)
-- `action: "transfer_data"` — Copiar datos de un usuario a otro:
-  - Recibe `source_user_id`, `target_user_id`, `tables[]` (exercises, routines, sessions, measurements, programs)
-  - Usa service role para leer datos del origen e insertarlos con el `user_id` del destino
-  - Para datos relacionales (routines→routine_exercises, sessions→session_exercises→sets, programs→program_weeks), mantiene las relaciones con nuevos UUIDs
+Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
 
-### 3. Navegación
+### 3. Error messages internos expuestos (3 edge functions)
+**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
 
-- Añadir enlace "Admin" en el menú "Más" de `BottomNav.tsx`, visible solo para admins
-- Nueva ruta `/admin` en `App.tsx` (protegida + verificación de admin)
+Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
 
-### 4. Archivos a crear/modificar
+### 4. Leaked password protection
+Activar mediante la herramienta de configuración de autenticación.
+
+### Archivos afectados
 
 | Archivo | Cambio |
 |---|---|
-| `src/pages/Admin.tsx` | Nueva página con tabla de usuarios + UI de transferencia |
-| `supabase/functions/admin-users/index.ts` | Añadir acciones `list_users` y `transfer_data` |
-| `src/App.tsx` | Añadir ruta `/admin` |
-| `src/components/BottomNav.tsx` | Enlace "Admin" para admins en menú Más |
-| `src/lib/api.ts` | Funciones `getAdminUsers()` y `transferUserData()` |
+| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
+| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
+| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
+| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
+| Auth config | Leaked password protection |
 
-### 5. Seguridad
-
-- Todas las operaciones admin pasan por la Edge Function con service role
-- Verificación de rol admin en la Edge Function antes de ejecutar cualquier acción
-- La transferencia de datos NO elimina datos del origen (es una copia)
-
-### 6. Datos transferibles y sus relaciones
-
-```text
-exercises (personal) ─── independiente
-routines ──┬── routine_exercises (referencia exercise_id)
-programs ──┬── program_weeks (referencia routine_id)
-sessions ──┬── session_exercises ──┬── sets
-body_measurements ─── independiente
-```
-
-La transferencia resp

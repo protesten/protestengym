@@ -28,6 +28,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const Fatigue = lazy(() => import("./pages/Fatigue"));
 const Coach = lazy(() => import("./pages/Coach"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Admin = lazy(() => import("./pages/Admin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -102,6 +103,7 @@ const App = () => (
               <Route path="/profile" element={<ProtectedPage><Profile /></ProtectedPage>} />
               <Route path="/fatigue" element={<ProtectedPage><Fatigue /></ProtectedPage>} />
               <Route path="/coach" element={<ProtectedPage><Coach /></ProtectedPage>} />
+              <Route path="/admin" element={<ProtectedPage><Admin /></ProtectedPage>} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>

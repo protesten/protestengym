@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut, Flame, Brain } from 'lucide-react';
+import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut, Flame, Brain, ShieldCheck } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { getProfile, isAdmin, getPendingUsers } from '@/lib/api';
 import { getAppFeatures } from '@/lib/ai-insights';
@@ -21,6 +21,7 @@ const allMoreItems = [
   { to: '/calendar', icon: CalendarDays, label: 'Calendario', featureKey: 'nav_calendar' as const },
   { to: '/report', icon: FileText, label: 'Informe', featureKey: 'nav_report' as const },
   { to: '/profile', icon: User, label: 'Perfil', featureKey: null },
+  { to: '/admin', icon: ShieldCheck, label: 'Admin', featureKey: null, adminOnly: true },
 ];
 
 export function BottomNav() {
@@ -40,8 +41,11 @@ export function BottomNav() {
   const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
 
   const moreItems = useMemo(() =>
-    allMoreItems.filter(item => item.featureKey === null || feat[item.featureKey]),
-    [feat]
+    allMoreItems.filter(item => {
+      if ((item as any).adminOnly && !admin) return false;
+      return item.featureKey === null || feat[item.featureKey];
+    }),
+    [feat, admin]
   );
 
   const moreActive = moreItems.some(({ to }) => pathname === to || (to !== '/' && pathname.startsWith(to)));
