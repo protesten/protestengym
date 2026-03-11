@@ -1,47 +1,43 @@
 
 
-## Plan: Corrección de 4 problemas de seguridad restantes
+## Plan: Mejorar panel de administración con gestión completa de usuarios y copia de datos
 
-### 1. HTML Injection en notificación admin (edge function)
-**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
+### Problemas actuales
+1. **Solo transferencia, no copia**: La transferencia actual ya copia (no borra origen), pero falta la opción de "mover" (copiar + borrar origen)
+2. **Gestión de usuarios limitada**: Solo se puede aprobar o eliminar. No hay forma de ver detalles del usuario, pausarlo (revocar aprobación) ni ver estadísticas
 
-Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
+### Cambios
 
-### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
-**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
+#### 1. Tab "Usuarios" mejorado (`src/pages/Admin.tsx`)
+- Al pulsar en un usuario se abre un **diálogo de detalle** con:
+  - Info completa: nombre, email, fecha registro, sexo, altura, fecha nacimiento
+  - Estadísticas: número de ejercicios, rutinas, sesiones, medidas (obtenidas via Edge Function)
+  - Acciones: **Aprobar / Pausar** (toggle `is_approved`), **Eliminar**
+- Los usuarios aprobados muestran un botón "Pausar" que revoca `is_approved` (deja la cuenta pero impide el acceso por RLS)
+- Badge visual diferenciado: "Aprobado" (verde), "Pendiente" (amarillo), "Pausado" (rojo) — Pausado = existía aprobación previa que se revocó
 
-**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+#### 2. Tab "Datos" mejorado (renombrar de "Transferir")
+- Añadir opción de modo: **Copiar** (mantiene datos en origen) vs **Mover** (copia y borra datos del origen)
+- Radio group para seleccionar el modo antes de ejecutar
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_approved_user()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND is_approved = true
-  );
-$$;
-```
+#### 3. Edge Function (`supabase/functions/admin-users/index.ts`)
+- Nueva acción `suspend_user`: pone `is_approved = false` en el perfil del usuario
+- Nueva acción `user_stats`: devuelve conteos de ejercicios, rutinas, sesiones, medidas para un `user_id`
+- Ampliar `transfer_data` con parámetro `mode: 'copy' | 'move'` — si es "move", tras copiar elimina los datos del origen en las tablas seleccionadas
 
-Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
+#### 4. API (`src/lib/api.ts`)
+- Añadir `suspendUser(userId)`, `getUserStats(userId)`
+- Modificar `transferUserData` para aceptar `mode`
 
-Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
-
-### 3. Error messages internos expuestos (3 edge functions)
-**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
-
-Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
-
-### 4. Leaked password protection
-Activar mediante la herramienta de configuración de autenticación.
-
-### Archivos afectados
+### Archivos a modificar
 
 | Archivo | Cambio |
 |---|---|
-| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
-| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
-| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
-| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
-| Auth config | Leaked password protection |
+| `src/pages/Admin.tsx` | Diálogo detalle usuario, botón pausar, modo copiar/mover |
+| `supabase/functions/admin-users/index.ts` | Acciones `suspend_user`, `user_stats`, modo `move` en transfer |
+| `src/lib/api.ts` | Nuevas funciones `suspendUser`, `getUserStats`, param `mode` en transfer |
+
+### Seguridad
+- Todas las nuevas acciones pasan por `verifyAdmin()` en la Edge Function
+- La suspensión usa service role para actualizar `is_approved` (el trigger `profiles_protect_is_approved` ya protege esto en el lado cliente)
 
