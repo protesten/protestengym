@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut, Flame, Brain } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getProfile } from '@/lib/api';
+import { getProfile, isAdmin, getPendingUsers } from '@/lib/api';
 import { getAppFeatures } from '@/lib/ai-insights';
 
 const mainItems = [
