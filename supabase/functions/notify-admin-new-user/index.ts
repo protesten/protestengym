@@ -20,28 +20,76 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const authHeader = req.headers.get("Authorization");
-  const expectedSecret = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!authHeader || authHeader !== `Bearer ${expectedSecret}`) {
-    return new Response(JSON.stringify({ error: "Forbidden" }), {
-      status: 403,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
-  }
-
   try {
-    const { record } = await req.json();
-    if (!record) {
-      return new Response(JSON.stringify({ error: "No record" }), {
-        status: 400,
+    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
+    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const anonKey = Deno.env.get("SUPABASE_ANON_KEY")!;
+
+    // Authenticate: accept either service role key OR user JWT
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-    const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+    const token = authHeader.replace("Bearer ", "");
+    let callerUserId: string | null = null;
+
+    // If it's the service role key, trust the body's record
+    const isServiceRole = token === serviceRoleKey;
+
+    if (!isServiceRole) {
+      // Validate user JWT
+      const userClient = createClient(supabaseUrl, anonKey, {
+        global: { headers: { Authorization: authHeader } },
+      });
+      const { data, error } = await userClient.auth.getUser(token);
+      if (error || !data?.user) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), {
+          status: 401,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      callerUserId = data.user.id;
+    }
+
     const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
+    // Get profile info
+    let profileUserId: string;
+    let displayName: string;
+
+    if (isServiceRole) {
+      const { record } = await req.json();
+      if (!record) {
+        return new Response(JSON.stringify({ error: "No record" }), {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      profileUserId = record.user_id;
+      displayName = record.display_name || "Sin nombre";
+    } else {
+      // User calling for themselves
+      profileUserId = callerUserId!;
+      const { data: profile } = await adminClient
+        .from("profiles")
+        .select("display_name, is_approved")
+        .eq("user_id", profileUserId)
+        .single();
+
+      if (!profile || profile.is_approved) {
+        // Already approved or no profile — nothing to notify
+        return new Response(JSON.stringify({ ok: true, message: "No notification needed" }), {
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        });
+      }
+      displayName = profile.display_name || "Sin nombre";
+    }
+
+    // Find admin emails
     const { data: adminRoles } = await adminClient
       .from("user_roles")
       .select("user_id")
@@ -61,25 +109,22 @@ Deno.serve(async (req) => {
     }
 
     if (!adminEmails.length) {
-      console.log("No admin emails found");
       return new Response(JSON.stringify({ ok: true, message: "No admin emails" }), {
         headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const rawName = record.display_name || "Sin nombre";
-    const newUserName = escapeHtml(rawName);
-
+    const newUserName = escapeHtml(displayName);
     let userEmail = "desconocido";
     try {
-      const { data: { user } } = await adminClient.auth.admin.getUserById(record.user_id);
+      const { data: { user } } = await adminClient.auth.admin.getUserById(profileUserId);
       if (user?.email) userEmail = user.email;
     } catch {}
     const safeEmail = escapeHtml(userEmail);
-    const safeSubject = rawName.replace(/[<>"'&]/g, "");
+    const safeSubject = displayName.replace(/[<>"'&]/g, "");
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
-    
+
     if (resendApiKey) {
       for (const adminEmail of adminEmails) {
         try {
@@ -112,7 +157,7 @@ Deno.serve(async (req) => {
       }
     } else {
       console.log("RESEND_API_KEY not configured. Skipping email notifications.");
-      console.log(`New user pending: ${rawName} (${userEmail}). Admins to notify: ${adminEmails.join(", ")}`);
+      console.log(`New user pending: ${displayName} (${userEmail}). Admins to notify: ${adminEmails.join(", ")}`);
     }
 
     return new Response(JSON.stringify({ ok: true }), {
