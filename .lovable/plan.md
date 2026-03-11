@@ -1,47 +1,46 @@
 
 
-## Plan: Corrección de 4 problemas de seguridad restantes
+## Diagnóstico
 
-### 1. HTML Injection en notificación admin (edge function)
+He verificado el estado actual de la base de datos y el flujo completo:
+
+1. **El registro SÍ funciona**: el usuario sergio130578@gmail.com se registró correctamente, se creó su perfil con `is_approved: false`, y la Edge Function `notify-admin-new-user` respondió `{"ok": true}`.
+
+2. **El email NO se envió (o no hay evidencia)**: Los logs de la Edge Function solo muestran boot/shutdown, sin ningún mensaje de "RESEND_API_KEY not configured" ni errores de envío. Es probable que la función ejecutó pero el email no llegó (problema con el dominio remitente `notifications@gym.protesten.com` no verificado en Resend, o similar).
+
+3. **La notificación in-app es invisible**: El componente `AdminUserApproval` solo aparece **al final de la página de Perfil**. No hay ningún badge, punto rojo ni indicador en la navegación que avise al admin de que tiene usuarios pendientes. Si el admin no va expresamente a Perfil y hace scroll, nunca lo ve.
+
+4. **El usuario nuevo NO recibe feedback claro**: Solo ve la pantalla de "Cuenta pendiente de aprobación" pero no sabe si se avisó al administrador ni cuánto tardará.
+
+## Plan de corrección
+
+### 1. Badge de notificación en la navegación para admins
+
+**Archivo:** `src/components/BottomNav.tsx`
+
+Cuando el usuario es admin, consultar `getPendingUsers` y mostrar un **punto rojo con número** sobre el icono de "Más" (o sobre "Perfil" en el menú expandido) cuando haya usuarios pendientes. Esto hace visible la solicitud sin necesidad de navegar a Perfil.
+
+### 2. Mejorar la pantalla de "Cuenta pendiente" para el usuario nuevo
+
+**Archivo:** `src/components/ProtectedRoute.tsx`
+
+Añadir un mensaje más claro: "Se ha notificado al administrador. Recibirás acceso cuando apruebe tu cuenta." para que el usuario sepa que el proceso está en marcha.
+
+### 3. Asegurar que el email realmente se envía (logging en Edge Function)
+
 **Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
 
-Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
+Añadir `console.log` explícitos antes y después del envío del email, incluyendo el status de la respuesta de Resend, para poder diagnosticar si el email se envía o falla silenciosamente. También loguear si `RESEND_API_KEY` está presente.
 
-### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
-**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
+### 4. Verificar dominio de envío en Resend
 
-**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+El email se envía desde `notifications@gym.protesten.com`. Si este dominio no está verificado en Resend, los emails se rechazan silenciosamente. Se necesita verificar que el dominio está configurado correctamente, o usar el dominio por defecto de Resend para testing.
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_approved_user()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND is_approved = true
-  );
-$$;
-```
-
-Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
-
-Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
-
-### 3. Error messages internos expuestos (3 edge functions)
-**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
-
-Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
-
-### 4. Leaked password protection
-Activar mediante la herramienta de configuración de autenticación.
-
-### Archivos afectados
+### Archivos a modificar
 
 | Archivo | Cambio |
 |---|---|
-| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
-| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
-| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
-| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
-| Auth config | Leaked password protection |
+| `src/components/BottomNav.tsx` | Badge con número de pendientes para admins |
+| `src/components/ProtectedRoute.tsx` | Mejorar mensaje UX para usuario no aprobado |
+| `supabase/functions/notify-admin-new-user/index.ts` | Añadir logging detallado del envío de email |
 
