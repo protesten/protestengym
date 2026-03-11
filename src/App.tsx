@@ -86,6 +86,7 @@ const App = () => (
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/" element={<ProtectedPage><Index /></ProtectedPage>} />
               <Route path="/exercises" element={<ProtectedPage><Exercises /></ProtectedPage>} />
               <Route path="/routines" element={<ProtectedPage><Routines /></ProtectedPage>} />
