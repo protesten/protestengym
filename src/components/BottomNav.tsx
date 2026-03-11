@@ -28,6 +28,14 @@ export function BottomNav() {
   const { signOut } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  const { data: admin } = useQuery({ queryKey: ['isAdmin'], queryFn: isAdmin });
+  const { data: pendingUsers } = useQuery({
+    queryKey: ['pendingUsers'],
+    queryFn: getPendingUsers,
+    enabled: !!admin,
+    refetchInterval: 60000,
+  });
+  const pendingCount = admin && pendingUsers?.length ? pendingUsers.length : 0;
 
   const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
 
