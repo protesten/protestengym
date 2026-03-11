@@ -21,6 +21,7 @@ const allMoreItems = [
   { to: '/calendar', icon: CalendarDays, label: 'Calendario', featureKey: 'nav_calendar' as const },
   { to: '/report', icon: FileText, label: 'Informe', featureKey: 'nav_report' as const },
   { to: '/profile', icon: User, label: 'Perfil', featureKey: null },
+  { to: '/admin', icon: ShieldCheck, label: 'Admin', featureKey: null, adminOnly: true },
 ];
 
 export function BottomNav() {
