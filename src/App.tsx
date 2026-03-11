@@ -28,6 +28,7 @@ const Auth = lazy(() => import("./pages/Auth"));
 const Fatigue = lazy(() => import("./pages/Fatigue"));
 const Coach = lazy(() => import("./pages/Coach"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const Admin = lazy(() => import("./pages/Admin"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
