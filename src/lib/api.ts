@@ -417,11 +417,28 @@ export async function getAdminUsers() {
   return data as (Profile & { email: string })[];
 }
 
-export async function transferUserData(sourceUserId: string, targetUserId: string, tables: string[]) {
+export async function transferUserData(sourceUserId: string, targetUserId: string, tables: string[], mode: 'copy' | 'move' = 'copy') {
   const { data, error } = await supabase.functions.invoke('admin-users', {
-    body: { action: 'transfer_data', source_user_id: sourceUserId, target_user_id: targetUserId, tables },
+    body: { action: 'transfer_data', source_user_id: sourceUserId, target_user_id: targetUserId, tables, mode },
   });
   if (error) throw error;
   if (data?.error) throw new Error(data.error);
   return data as { success: boolean; summary: Record<string, number> };
+}
+
+export async function suspendUser(userId: string) {
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action: 'suspend_user', user_id: userId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+}
+
+export async function getUserStats(userId: string) {
+  const { data, error } = await supabase.functions.invoke('admin-users', {
+    body: { action: 'user_stats', user_id: userId },
+  });
+  if (error) throw error;
+  if (data?.error) throw new Error(data.error);
+  return data as { exercises: number; routines: number; sessions: number; measurements: number; programs: number };
 }
