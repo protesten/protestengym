@@ -34,7 +34,7 @@ export function ProtectedRoute({ children }: { children: React.ReactNode }) {
           <div>
             <h1 className="text-xl font-black mb-2">Cuenta pendiente de aprobación</h1>
             <p className="text-muted-foreground text-sm">
-              Tu cuenta ha sido creada correctamente. Un administrador debe aprobarla antes de que puedas acceder a la aplicación.
+              Tu cuenta ha sido creada correctamente y se ha notificado al administrador. Recibirás acceso cuando apruebe tu solicitud.
             </p>
           </div>
           <Button

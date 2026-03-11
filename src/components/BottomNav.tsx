@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Home, Dumbbell, ListChecks, BarChart3, User, Ruler, Calendar, FileText, MoreHorizontal, X, CalendarDays, LogOut, Flame, Brain } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
-import { getProfile } from '@/lib/api';
+import { getProfile, isAdmin, getPendingUsers } from '@/lib/api';
 import { getAppFeatures } from '@/lib/ai-insights';
 
 const mainItems = [
@@ -28,6 +28,14 @@ export function BottomNav() {
   const { signOut } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
   const { data: profile } = useQuery({ queryKey: ['profile'], queryFn: getProfile });
+  const { data: admin } = useQuery({ queryKey: ['isAdmin'], queryFn: isAdmin });
+  const { data: pendingUsers } = useQuery({
+    queryKey: ['pendingUsers'],
+    queryFn: getPendingUsers,
+    enabled: !!admin,
+    refetchInterval: 60000,
+  });
+  const pendingCount = admin && pendingUsers?.length ? pendingUsers.length : 0;
 
   const feat = useMemo(() => getAppFeatures((profile?.preferences as any)), [profile]);
 
@@ -101,6 +109,11 @@ export function BottomNav() {
           >
             <div className={`relative ${moreOpen || moreActive ? 'drop-shadow-[0_0_6px_hsl(20_100%_60%/0.5)]' : ''}`}>
               {moreOpen ? <X className="h-5 w-5" /> : <MoreHorizontal className="h-5 w-5" />}
+              {pendingCount > 0 && (
+                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4 items-center justify-center rounded-full bg-destructive text-[9px] font-bold text-destructive-foreground">
+                  {pendingCount}
+                </span>
+              )}
             </div>
             <span className="text-[10px] font-semibold">Más</span>
           </button>

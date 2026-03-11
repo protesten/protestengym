@@ -124,11 +124,15 @@ Deno.serve(async (req) => {
     const safeSubject = displayName.replace(/[<>"'&]/g, "");
 
     const resendApiKey = Deno.env.get("RESEND_API_KEY");
+    console.log(`[notify] RESEND_API_KEY present: ${!!resendApiKey}`);
+    console.log(`[notify] New user: ${displayName} (${userEmail})`);
+    console.log(`[notify] Admin emails to notify: ${adminEmails.join(", ")}`);
 
     if (resendApiKey) {
       for (const adminEmail of adminEmails) {
         try {
-          await fetch("https://api.resend.com/emails", {
+          console.log(`[notify] Sending email to ${adminEmail}...`);
+          const emailRes = await fetch("https://api.resend.com/emails", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -151,13 +155,14 @@ Deno.serve(async (req) => {
               `,
             }),
           });
+          const emailBody = await emailRes.text();
+          console.log(`[notify] Resend response for ${adminEmail}: status=${emailRes.status} body=${emailBody}`);
         } catch (emailErr) {
-          console.error("Error sending notification to", adminEmail, emailErr);
+          console.error("[notify] Error sending notification to", adminEmail, emailErr);
         }
       }
     } else {
-      console.log("RESEND_API_KEY not configured. Skipping email notifications.");
-      console.log(`New user pending: ${displayName} (${userEmail}). Admins to notify: ${adminEmails.join(", ")}`);
+      console.log("[notify] RESEND_API_KEY not configured. Skipping email notifications.");
     }
 
     return new Response(JSON.stringify({ ok: true }), {
