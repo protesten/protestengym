@@ -1,47 +1,59 @@
 
 
-## Plan: Corrección de 4 problemas de seguridad restantes
+## Diagnóstico
 
-### 1. HTML Injection en notificación admin (edge function)
-**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
+El problema está claramente identificado en los logs de autenticación:
 
-Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
-
-### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
-**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
-
-**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
-
-```sql
-CREATE OR REPLACE FUNCTION public.is_approved_user()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND is_approved = true
-  );
-$$;
+```
+ERROR: function extensions.http_post(url => text, body => text, headers => jsonb) does not exist (SQLSTATE 42883)
+msg: "500: Database error saving new user"
 ```
 
-Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
+**Cadena de fallos:**
+1. Nuevo usuario hace login con Google → Supabase crea fila en `auth.users`
+2. Trigger `on_auth_user_created` → ejecuta `handle_new_user()` → inserta en `profiles`
+3. Trigger `on_profile_created_notify_admin` → ejecuta `notify_admin_new_user()` → llama a `extensions.http_post()`
+4. `http_post` NO EXISTE en Lovable Cloud (la extensión `pg_net`/`http` no está disponible)
+5. **Toda la transacción se aborta**: no se crea el perfil, no se completa el registro, el usuario queda en un estado roto
 
-Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
+Por eso el usuario vuelve a la pantalla de login y el admin no ve ninguna solicitud.
 
-### 3. Error messages internos expuestos (3 edge functions)
-**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
+## Plan de corrección
 
-Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
+### 1. Migración SQL: eliminar el trigger problemático
 
-### 4. Leaked password protection
-Activar mediante la herramienta de configuración de autenticación.
+Eliminar el trigger `on_profile_created_notify_admin` y la función `notify_admin_new_user()` que usan `extensions.http_post`. También eliminar la extensión `pg_net` que no funciona en Lovable Cloud.
 
-### Archivos afectados
+```sql
+DROP TRIGGER IF EXISTS on_profile_created_notify_admin ON public.profiles;
+DROP FUNCTION IF EXISTS public.notify_admin_new_user();
+DROP EXTENSION IF EXISTS pg_net;
+```
+
+### 2. Notificación al admin desde el código del cliente
+
+Mover la lógica de notificación al frontend: después de que `onAuthStateChange` detecte un `SIGNED_IN` y el perfil exista con `is_approved = false`, invocar la Edge Function `notify-admin-new-user` desde el cliente.
+
+**Archivo:** `src/contexts/AuthContext.tsx`
+- En el listener de `onAuthStateChange`, cuando `event === 'SIGNED_IN'`:
+  - Consultar el perfil del usuario
+  - Si `is_approved === false`, llamar a la Edge Function `notify-admin-new-user` con `supabase.functions.invoke()`
+  - Usar un flag en `sessionStorage` para evitar llamadas duplicadas
+
+### 3. Actualizar la Edge Function para aceptar llamadas autenticadas
+
+**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
+- Actualmente solo acepta `SERVICE_ROLE_KEY`. Modificar para que también acepte JWT de usuario autenticado (validando el token y extrayendo el `user_id` del claim)
+- Mantener la lógica existente de buscar admins y enviar emails
+
+**Archivo:** `supabase/config.toml`
+- Mantener `verify_jwt = false` para esta función (la validación se hace manualmente dentro)
+
+### Archivos a modificar
 
 | Archivo | Cambio |
 |---|---|
-| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
-| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
-| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
-| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
-| Auth config | Leaked password protection |
+| Migración SQL | Eliminar trigger, función y extensión rotas |
+| `src/contexts/AuthContext.tsx` | Llamar a notify edge function tras login de usuario no aprobado |
+| `supabase/functions/notify-admin-new-user/index.ts` | Aceptar JWT de usuario además de service role key |
 
