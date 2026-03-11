@@ -27,6 +27,7 @@ const SessionCalendar = lazy(() => import("./pages/SessionCalendar"));
 const Auth = lazy(() => import("./pages/Auth"));
 const Fatigue = lazy(() => import("./pages/Fatigue"));
 const Coach = lazy(() => import("./pages/Coach"));
+const ResetPassword = lazy(() => import("./pages/ResetPassword"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
 const queryClient = new QueryClient({
@@ -85,6 +86,7 @@ const App = () => (
           <Suspense fallback={<PageLoader />}>
             <Routes>
               <Route path="/auth" element={<Auth />} />
+              <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/" element={<ProtectedPage><Index /></ProtectedPage>} />
               <Route path="/exercises" element={<ProtectedPage><Exercises /></ProtectedPage>} />
               <Route path="/routines" element={<ProtectedPage><Routines /></ProtectedPage>} />

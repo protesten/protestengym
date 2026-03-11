@@ -9,6 +9,9 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
+  signUp: (email: string, password: string) => Promise<{ error?: string; needsConfirmation?: boolean }>;
+  resetPassword: (email: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
 }
 
@@ -54,6 +57,47 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  const signInWithEmail = useCallback(async (email: string, password: string): Promise<{ error?: string }> => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) {
+      if (error.message === 'Email not confirmed') {
+        return { error: 'Debes confirmar tu email antes de iniciar sesión. Revisa tu bandeja de entrada.' };
+      }
+      if (error.message === 'Invalid login credentials') {
+        return { error: 'Email o contraseña incorrectos.' };
+      }
+      return { error: error.message };
+    }
+    return {};
+  }, []);
+
+  const signUp = useCallback(async (email: string, password: string): Promise<{ error?: string; needsConfirmation?: boolean }> => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { emailRedirectTo: window.location.origin },
+    });
+    if (error) {
+      if (error.message?.includes('already registered')) {
+        return { error: 'Este email ya está registrado. Intenta iniciar sesión.' };
+      }
+      return { error: error.message };
+    }
+    // If user exists but identities is empty, email is already taken
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      return { error: 'Este email ya está registrado. Intenta iniciar sesión.' };
+    }
+    return { needsConfirmation: true };
+  }, []);
+
+  const resetPassword = useCallback(async (email: string): Promise<{ error?: string }> => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) return { error: error.message };
+    return {};
+  }, []);
+
   useEffect(() => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       setSession(session);
@@ -61,7 +105,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setLoading(false);
 
       if (event === 'SIGNED_IN' && session?.user) {
-        // Notify admin for unapproved users (deferred to avoid blocking)
         setTimeout(() => notifyAdminIfNeeded(session.user.id), 0);
       }
 
@@ -100,7 +143,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, session, loading, signInWithGoogle, signInWithEmail, signUp, resetPassword, signOut }}>
       {children}
     </AuthContext.Provider>
   );
