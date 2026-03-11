@@ -1,47 +1,43 @@
 
 
-## Plan: Corrección de 4 problemas de seguridad restantes
+## Plan: Añadir registro e inicio de sesión con email y contraseña
 
-### 1. HTML Injection en notificación admin (edge function)
-**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
+### Cambios necesarios
 
-Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
+**1. AuthContext (`src/contexts/AuthContext.tsx`)**
+- Añadir dos funciones: `signUp(email, password)` y `signInWithEmail(email, password)`
+- `signUp` usa `supabase.auth.signUp()` con `emailRedirectTo: window.location.origin`
+- `signInWithEmail` usa `supabase.auth.signInWithPassword()`
+- Exportar ambas en el contexto
 
-### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
-**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
+**2. Página Auth (`src/pages/Auth.tsx`)**
+- Añadir tabs o toggle para alternar entre "Iniciar sesión" y "Registrarse"
+- Formulario con campos email + contraseña (y confirmar contraseña en registro)
+- Validación con zod: email válido, contraseña mínimo 6 caracteres, confirmación coincide
+- Mantener el botón de Google como opción alternativa debajo del formulario
+- Separador visual "o" entre el formulario y Google
+- Tras registro exitoso: mostrar mensaje "Revisa tu correo para confirmar tu cuenta"
+- Enlace "¿Olvidaste tu contraseña?" que muestra campo de email + botón para enviar reset
 
-**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+**3. Página Reset Password (`src/pages/ResetPassword.tsx`)**
+- Nueva página en `/reset-password`
+- Detecta `type=recovery` en URL hash
+- Formulario para nueva contraseña + confirmación
+- Llama a `supabase.auth.updateUser({ password })`
+- Ruta pública (no protegida) en `App.tsx`
 
-```sql
-CREATE OR REPLACE FUNCTION public.is_approved_user()
-RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
-SET search_path = public AS $$
-  SELECT EXISTS (
-    SELECT 1 FROM public.profiles
-    WHERE user_id = auth.uid() AND is_approved = true
-  );
-$$;
-```
+**4. Trigger `handle_new_user` (ya existente)**
+- Ya crea el perfil automáticamente con `is_approved: false` — funciona igual para email signup, extrayendo `full_name` del metadata (será vacío para email, lo cual está bien con el COALESCE a '')
 
-Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
+**5. No se activa auto-confirm**
+- El usuario eligió verificación por email, así que se mantiene la configuración por defecto (email debe ser verificado antes de poder iniciar sesión)
 
-Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
-
-### 3. Error messages internos expuestos (3 edge functions)
-**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
-
-Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
-
-### 4. Leaked password protection
-Activar mediante la herramienta de configuración de autenticación.
-
-### Archivos afectados
+### Archivos a crear/modificar
 
 | Archivo | Cambio |
 |---|---|
-| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
-| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
-| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
-| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
-| Auth config | Leaked password protection |
+| `src/contexts/AuthContext.tsx` | Añadir `signUp`, `signInWithEmail`, `resetPassword` |
+| `src/pages/Auth.tsx` | Formulario email/contraseña con tabs login/registro + Google |
+| `src/pages/ResetPassword.tsx` | Nueva página para restablecer contraseña |
+| `src/App.tsx` | Añadir ruta `/reset-password` (pública) |
 
