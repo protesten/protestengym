@@ -24,6 +24,7 @@ import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggestion';
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
+import { AISetCoach } from '@/components/AISetCoach';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { AIInsightCard } from '@/components/AIInsightCard';
