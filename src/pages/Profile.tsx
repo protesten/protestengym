@@ -226,6 +226,20 @@ export default function Profile() {
             </SelectContent>
           </Select>
         </div>
+        <div>
+          <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+            <Target className="h-3.5 w-3.5 text-primary" />
+            Objetivo de entrenamiento
+          </Label>
+          <Select value={userTrainingGoal} onValueChange={v => setUserTrainingGoal(v as TrainingGoal)}>
+            <SelectTrigger className="rounded-lg bg-card border-border"><SelectValue placeholder="Seleccionar objetivo" /></SelectTrigger>
+            <SelectContent>
+              {(Object.entries(TRAINING_GOALS) as [TrainingGoal, typeof TRAINING_GOALS[TrainingGoal]][]).map(([key, g]) => (
+                <SelectItem key={key} value={key}>{g.emoji} {g.label} ({g.reps} reps, RPE {g.optimalRPE[0]}-{g.optimalRPE[1]})</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
 
         {/* Appearance section */}
         <div className="rounded-xl bg-card border border-border p-4 space-y-4">
