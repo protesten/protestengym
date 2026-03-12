@@ -119,19 +119,20 @@ export default function Profile() {
     mutationFn: async () => {
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) throw new Error('Not authenticated');
-      const updateData: any = {
-        display_name: displayName,
-        preferences: {
-          units,
-          ai_enabled: aiPrefs.ai_enabled,
-          ai_tone: aiPrefs.ai_tone,
-          ai_mood: aiPrefs.ai_mood,
-          ai_features: aiPrefs.ai_features,
-          font_size: aiPrefs.font_size,
-          theme: aiPrefs.theme,
-          app_features: appFeatures,
-        },
-      };
+        const updateData: any = {
+          display_name: displayName,
+          preferences: {
+            units,
+            training_goal: userTrainingGoal || null,
+            ai_enabled: aiPrefs.ai_enabled,
+            ai_tone: aiPrefs.ai_tone,
+            ai_mood: aiPrefs.ai_mood,
+            ai_features: aiPrefs.ai_features,
+            font_size: aiPrefs.font_size,
+            theme: aiPrefs.theme,
+            app_features: appFeatures,
+          },
+        };
       if (heightCm.trim()) updateData.height_cm = Number(heightCm);
       else updateData.height_cm = null;
       if (birthDate.trim()) updateData.birth_date = birthDate;
