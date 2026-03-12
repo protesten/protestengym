@@ -109,6 +109,7 @@ export default function Profile() {
       setHeightCm((profile as any).height_cm?.toString() ?? '');
       setBirthDate((profile as any).birth_date ?? '');
       setSex((profile as any).sex ?? '');
+      setUserTrainingGoal(prefs?.training_goal ?? '');
       setAiPrefs(getAIPreferences(prefs));
       setAppFeatures(getAppFeatures(prefs));
     }
