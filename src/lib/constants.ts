@@ -35,11 +35,14 @@ export const SET_TYPE_LABELS: Record<SetType, string> = {
 
 export const RPE_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10] as const;
 
-export type TrainingGoal = 'strength' | 'hypertrophy' | 'endurance';
-export const TRAINING_GOALS: Record<TrainingGoal, { label: string; pct: number; reps: string; emoji: string }> = {
-  strength: { label: 'Fuerza', pct: 0.85, reps: '3-5', emoji: '🏋️' },
-  hypertrophy: { label: 'Hipertrofia', pct: 0.75, reps: '8-12', emoji: '💪' },
-  endurance: { label: 'Resistencia', pct: 0.60, reps: '15+', emoji: '🔄' },
+export type TrainingGoal = 'strength' | 'hypertrophy' | 'endurance' | 'power' | 'technique' | 'aerobic';
+export const TRAINING_GOALS: Record<TrainingGoal, { label: string; pct: number; reps: string; emoji: string; optimalRPE: [number, number] }> = {
+  strength: { label: 'Fuerza', pct: 0.85, reps: '3-5', emoji: '🏋️', optimalRPE: [8, 9] },
+  hypertrophy: { label: 'Hipertrofia', pct: 0.75, reps: '8-12', emoji: '💪', optimalRPE: [7, 9] },
+  endurance: { label: 'Resistencia', pct: 0.60, reps: '15+', emoji: '🔄', optimalRPE: [6, 7] },
+  power: { label: 'Potencia', pct: 0.90, reps: '1-3', emoji: '⚡', optimalRPE: [7, 8] },
+  technique: { label: 'Técnica', pct: 0.50, reps: '8-12', emoji: '🎯', optimalRPE: [5, 6] },
+  aerobic: { label: 'Aeróbico', pct: 0.40, reps: '20+', emoji: '🫀', optimalRPE: [4, 6] },
 };
 
 export const BODYWEIGHT_EXERCISE_PATTERNS = [

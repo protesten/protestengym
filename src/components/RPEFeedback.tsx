@@ -1,9 +1,15 @@
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
+import { TRAINING_GOALS, type TrainingGoal, type TrackingType, type SetType } from '@/lib/constants';
 
 interface Props {
   rpe: number | null;
   weight: number | null;
+  reps?: number | null;
+  durationSeconds?: number | null;
+  trackingType?: TrackingType;
+  setType?: SetType;
+  trainingGoal?: TrainingGoal | null;
   className?: string;
 }
 
@@ -25,23 +31,78 @@ export function RPEBadge({ rpe, className }: { rpe: number | null; className?: s
   );
 }
 
-export function RPEFeedback({ rpe, weight, className }: Props) {
-  if (rpe == null || weight == null || weight <= 0) return null;
+export function RPEFeedback({ rpe, weight, reps, durationSeconds, trackingType = 'weight_reps', setType = 'work', trainingGoal, className }: Props) {
+  if (rpe == null) return null;
+
+  // For warmup/approach sets — only warn if RPE is too high
+  if (setType === 'warmup' || setType === 'approach') {
+    if (rpe >= 7) {
+      return (
+        <p className={cn("text-[10px] font-medium mt-0.5 pl-8 text-[hsl(var(--warning))]", className)}>
+          ⚠️ RPE alto para {setType === 'warmup' ? 'calentamiento' : 'aproximación'} — debería ser ≤6
+        </p>
+      );
+    }
+    return null;
+  }
+
+  const goal = trainingGoal && TRAINING_GOALS[trainingGoal] ? trainingGoal : 'hypertrophy';
+  const goalInfo = TRAINING_GOALS[goal];
+  const [optLow, optHigh] = goalInfo.optimalRPE;
 
   let message: string;
   let color: string;
 
-  if (rpe <= 7) {
-    const suggested = Math.round(weight * 1.05 * 2) / 2;
-    message = `¡Muy fácil! Sube a ~${suggested}kg (+5%)`;
-    color = 'text-[hsl(var(--success))]';
-  } else if (rpe <= 9) {
-    const suggested = Math.round(weight * 1.02 * 2) / 2;
-    message = `Carga óptima. Mantén o sube a ~${suggested}kg`;
-    color = 'text-[hsl(var(--warning))]';
+  if (trackingType === 'weight_reps') {
+    if (weight == null || weight <= 0) return null;
+    if (rpe < optLow) {
+      const pctIncrease = rpe <= optLow - 2 ? 0.05 : 0.025;
+      const suggested = Math.round(weight * (1 + pctIncrease) * 2) / 2;
+      message = `RPE bajo para ${goalInfo.label}. Sube a ~${suggested}kg (+${Math.round(pctIncrease * 100)}%)`;
+      color = 'text-[hsl(var(--success))]';
+    } else if (rpe <= optHigh) {
+      message = `✓ Zona óptima para ${goalInfo.label} (RPE ${optLow}-${optHigh})`;
+      color = 'text-[hsl(var(--warning))]';
+    } else {
+      message = `RPE alto para ${goalInfo.label}. Mantén peso hasta dominar técnica`;
+      color = 'text-destructive';
+    }
+  } else if (trackingType === 'reps_only') {
+    if (reps == null) return null;
+    if (rpe < optLow) {
+      message = `RPE bajo — aumenta reps o dificultad (${goalInfo.label}: RPE ${optLow}-${optHigh})`;
+      color = 'text-[hsl(var(--success))]';
+    } else if (rpe <= optHigh) {
+      message = `✓ Zona óptima para ${goalInfo.label}`;
+      color = 'text-[hsl(var(--warning))]';
+    } else {
+      message = `RPE alto — reduce reps o facilita la variante`;
+      color = 'text-destructive';
+    }
+  } else if (trackingType === 'time_only') {
+    if (durationSeconds == null) return null;
+    if (rpe < optLow) {
+      message = `RPE bajo — aumenta duración o intensidad`;
+      color = 'text-[hsl(var(--success))]';
+    } else if (rpe <= optHigh) {
+      message = `✓ Duración óptima para ${goalInfo.label}`;
+      color = 'text-[hsl(var(--warning))]';
+    } else {
+      message = `RPE alto — reduce duración o baja intensidad`;
+      color = 'text-destructive';
+    }
   } else {
-    message = 'Límite alcanzado. Mantén hasta dominar técnica';
-    color = 'text-destructive';
+    // distance_time
+    if (rpe < optLow) {
+      message = `RPE bajo — aumenta distancia o ritmo`;
+      color = 'text-[hsl(var(--success))]';
+    } else if (rpe <= optHigh) {
+      message = `✓ Zona óptima para ${goalInfo.label}`;
+      color = 'text-[hsl(var(--warning))]';
+    } else {
+      message = `RPE alto — reduce distancia o baja ritmo`;
+      color = 'text-destructive';
+    }
   }
 
   return (

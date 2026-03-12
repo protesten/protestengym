@@ -12,7 +12,8 @@ export type InsightContext =
   | 'monthly_report_narrative'
   | 'profile_recommendations'
   | 'new_session_suggestion'
-  | 'warmup_suggestion';
+  | 'warmup_suggestion'
+  | 'set_coaching';
 
 export interface AppFeaturePreferences {
   // Home
