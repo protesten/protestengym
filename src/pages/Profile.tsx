@@ -11,9 +11,10 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, User, Sparkles, ChevronDown, Palette, Type, LayoutGrid, RotateCcw } from 'lucide-react';
+import { LogOut, User, Sparkles, ChevronDown, Palette, Type, LayoutGrid, RotateCcw, Target } from 'lucide-react';
 import { AIInsightCard } from '@/components/AIInsightCard';
 import { getAIPreferences, getAppFeatures, DEFAULT_AI_PREFERENCES, DEFAULT_APP_FEATURES, type AIPreferences, type AppFeaturePreferences } from '@/lib/ai-insights';
+import { TRAINING_GOALS, type TrainingGoal } from '@/lib/constants';
 import { toast } from 'sonner';
 
 const AI_FEATURE_LABELS: Record<string, string> = {
@@ -28,6 +29,7 @@ const AI_FEATURE_LABELS: Record<string, string> = {
   monthly_report_narrative: 'Narrativa del informe',
   profile_recommendations: 'Recomendaciones de perfil',
   new_session_suggestion: 'Sugerencia de sesión',
+  set_coaching: 'Coaching en tiempo real',
 };
 
 const THEME_OPTIONS = [
@@ -94,6 +96,7 @@ export default function Profile() {
   const [heightCm, setHeightCm] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [sex, setSex] = useState('');
+  const [userTrainingGoal, setUserTrainingGoal] = useState<TrainingGoal | ''>('');
   const [aiPrefs, setAiPrefs] = useState<AIPreferences>(DEFAULT_AI_PREFERENCES);
   const [appFeatures, setAppFeatures] = useState<AppFeaturePreferences>({ ...DEFAULT_APP_FEATURES });
   const [showAiFeatures, setShowAiFeatures] = useState(false);
@@ -107,6 +110,7 @@ export default function Profile() {
       setHeightCm((profile as any).height_cm?.toString() ?? '');
       setBirthDate((profile as any).birth_date ?? '');
       setSex((profile as any).sex ?? '');
+      setUserTrainingGoal(prefs?.training_goal ?? '');
       setAiPrefs(getAIPreferences(prefs));
       setAppFeatures(getAppFeatures(prefs));
     }
@@ -116,19 +120,20 @@ export default function Profile() {
     mutationFn: async () => {
       const { data: { user: u } } = await supabase.auth.getUser();
       if (!u) throw new Error('Not authenticated');
-      const updateData: any = {
-        display_name: displayName,
-        preferences: {
-          units,
-          ai_enabled: aiPrefs.ai_enabled,
-          ai_tone: aiPrefs.ai_tone,
-          ai_mood: aiPrefs.ai_mood,
-          ai_features: aiPrefs.ai_features,
-          font_size: aiPrefs.font_size,
-          theme: aiPrefs.theme,
-          app_features: appFeatures,
-        },
-      };
+        const updateData: any = {
+          display_name: displayName,
+          preferences: {
+            units,
+            training_goal: userTrainingGoal || null,
+            ai_enabled: aiPrefs.ai_enabled,
+            ai_tone: aiPrefs.ai_tone,
+            ai_mood: aiPrefs.ai_mood,
+            ai_features: aiPrefs.ai_features,
+            font_size: aiPrefs.font_size,
+            theme: aiPrefs.theme,
+            app_features: appFeatures,
+          },
+        };
       if (heightCm.trim()) updateData.height_cm = Number(heightCm);
       else updateData.height_cm = null;
       if (birthDate.trim()) updateData.birth_date = birthDate;
@@ -219,6 +224,20 @@ export default function Profile() {
             <SelectContent>
               <SelectItem value="kg">Kilogramos (kg)</SelectItem>
               <SelectItem value="lb">Libras (lb)</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+        <div>
+          <Label className="text-xs font-semibold text-muted-foreground flex items-center gap-1.5">
+            <Target className="h-3.5 w-3.5 text-primary" />
+            Objetivo de entrenamiento
+          </Label>
+          <Select value={userTrainingGoal} onValueChange={v => setUserTrainingGoal(v as TrainingGoal)}>
+            <SelectTrigger className="rounded-lg bg-card border-border"><SelectValue placeholder="Seleccionar objetivo" /></SelectTrigger>
+            <SelectContent>
+              {(Object.entries(TRAINING_GOALS) as [TrainingGoal, typeof TRAINING_GOALS[TrainingGoal]][]).map(([key, g]) => (
+                <SelectItem key={key} value={key}>{g.emoji} {g.label} ({g.reps} reps, RPE {g.optimalRPE[0]}-{g.optimalRPE[1]})</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>

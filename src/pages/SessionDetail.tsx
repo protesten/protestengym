@@ -24,6 +24,7 @@ import { ExerciseNotePopover } from '@/components/ExerciseNotePopover';
 import { useOfflineQueue } from '@/hooks/useOfflineQueue';
 import { WeightSuggestion, TargetWeightBadge } from '@/components/WeightSuggestion';
 import { RPEFeedback, RPEBadge } from '@/components/RPEFeedback';
+import { AISetCoach } from '@/components/AISetCoach';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '@/components/ui/accordion';
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { AIInsightCard } from '@/components/AIInsightCard';
@@ -523,19 +524,38 @@ export default function SessionDetail() {
 
             {/* Sets */}
             <div className="space-y-1">
-              {sets.map((s, setIdx) => (
-                <div key={s.id}>
-                  <SetRow
-                    set={s}
-                    trackingType={(ex?.tracking_type ?? 'weight_reps') as TrackingType}
-                    plannedSet={plannedSets[setIdx]}
-                    prevSet={prevSets[setIdx]}
-                    onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
-                    onDelete={() => deleteSetMutation.mutate(s.id)}
-                  />
-                  <RPEFeedback rpe={s.rpe as number | null} weight={s.weight} />
-                </div>
-              ))}
+              {sets.map((s, setIdx) => {
+                const trackingT = (ex?.tracking_type ?? 'weight_reps') as TrackingType;
+                return (
+                  <div key={s.id}>
+                    <SetRow
+                      set={s}
+                      trackingType={trackingT}
+                      plannedSet={plannedSets[setIdx]}
+                      prevSet={prevSets[setIdx]}
+                      onUpdate={data => updateSetMutation.mutate({ setId: s.id, data, exerciseId: se.exercise_id })}
+                      onDelete={() => deleteSetMutation.mutate(s.id)}
+                    />
+                    <RPEFeedback
+                      rpe={s.rpe as number | null}
+                      weight={s.weight}
+                      reps={s.reps}
+                      durationSeconds={s.duration_seconds}
+                      trackingType={trackingT}
+                      setType={s.set_type as SetType}
+                      trainingGoal={(trainingGoal as TrainingGoal) ?? null}
+                    />
+                    <AISetCoach
+                      exerciseName={ex?.name ?? ''}
+                      currentSet={s}
+                      setIndex={setIdx}
+                      previousSets={sets.slice(0, setIdx)}
+                      trainingGoal={(trainingGoal as TrainingGoal) ?? null}
+                      trackingType={trackingT}
+                    />
+                  </div>
+                );
+              })}
             </div>
 
             {/* Add set button - prominent */}
