@@ -29,6 +29,7 @@ const AI_FEATURE_LABELS: Record<string, string> = {
   monthly_report_narrative: 'Narrativa del informe',
   profile_recommendations: 'Recomendaciones de perfil',
   new_session_suggestion: 'Sugerencia de sesión',
+  set_coaching: 'Coaching en tiempo real',
 };
 
 const THEME_OPTIONS = [
