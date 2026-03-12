@@ -95,6 +95,7 @@ export default function Profile() {
   const [heightCm, setHeightCm] = useState('');
   const [birthDate, setBirthDate] = useState('');
   const [sex, setSex] = useState('');
+  const [userTrainingGoal, setUserTrainingGoal] = useState<TrainingGoal | ''>('');
   const [aiPrefs, setAiPrefs] = useState<AIPreferences>(DEFAULT_AI_PREFERENCES);
   const [appFeatures, setAppFeatures] = useState<AppFeaturePreferences>({ ...DEFAULT_APP_FEATURES });
   const [showAiFeatures, setShowAiFeatures] = useState(false);
