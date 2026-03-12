@@ -11,9 +11,10 @@ import { Switch } from '@/components/ui/switch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
-import { LogOut, User, Sparkles, ChevronDown, Palette, Type, LayoutGrid, RotateCcw } from 'lucide-react';
+import { LogOut, User, Sparkles, ChevronDown, Palette, Type, LayoutGrid, RotateCcw, Target } from 'lucide-react';
 import { AIInsightCard } from '@/components/AIInsightCard';
 import { getAIPreferences, getAppFeatures, DEFAULT_AI_PREFERENCES, DEFAULT_APP_FEATURES, type AIPreferences, type AppFeaturePreferences } from '@/lib/ai-insights';
+import { TRAINING_GOALS, type TrainingGoal } from '@/lib/constants';
 import { toast } from 'sonner';
 
 const AI_FEATURE_LABELS: Record<string, string> = {
