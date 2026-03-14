@@ -60,6 +60,19 @@ export default function Index() {
   const weekCount = weekSessions.length;
   const totalSessions = sessions?.length ?? 0;
 
+  const completedSessions = useMemo(() =>
+    sessions?.filter(s => (s as any).is_completed).sort((a, b) => b.date.localeCompare(a.date)) ?? [],
+    [sessions]
+  );
+
+  const todayStr = now.toISOString().slice(0, 10);
+  const daysSinceLastSession = useMemo(() => {
+    const last = completedSessions[0]?.date;
+    if (!last) return null;
+    const diff = Math.floor((new Date(todayStr).getTime() - new Date(last).getTime()) / (86400000));
+    return diff;
+  }, [completedSessions, todayStr]);
+
   const last7 = summaries.filter(s => {
     const d = new Date(s.date);
     const diff = now.getTime() - d.getTime();
