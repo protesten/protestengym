@@ -1,45 +1,47 @@
 
 
-## Plan: Corregir datos enviados a la IA para el briefing diario
+## Plan: Corrección de 4 problemas de seguridad restantes
 
-### Problema raíz
+### 1. HTML Injection en notificación admin (edge function)
+**Archivo:** `supabase/functions/notify-admin-new-user/index.ts`
 
-La IA dice "4 días de inactividad" cuando solo ha habido 1 día sin entrenar. Esto ocurre porque los datos enviados al contexto `home_summary` son insuficientes:
+Añadir función `escapeHtml()` y aplicarla a `newUserName` y `userEmail` antes de interpolarlos en el HTML. También sanitizar el subject del email.
 
-- **No se envía la fecha actual** (`today`), así que la IA no puede calcular correctamente los días desde la última sesión
-- **Solo se envía `lastSessionDate`** como string sin contexto temporal — la IA tiene que "adivinar" qué día es hoy
-- **No se filtran sesiones completadas** — se envían todas, incluyendo incompletas, lo que puede confundir
+### 2. `is_approved` solo en frontend — bypass via API (migración SQL)
+**Problema:** Las políticas RLS no verifican `is_approved`, permitiendo a usuarios no aprobados operar directamente via API.
 
-### Cambios
+**Solución:** Crear función `is_approved_user()` SECURITY DEFINER y actualizar todas las políticas RLS de las tablas de usuario (`exercises`, `sessions`, `sets`, `session_exercises`, `routines`, `routine_exercises`, `programs`, `program_weeks`, `body_measurements`) para incluir `AND public.is_approved_user()` en sus condiciones USING/WITH CHECK.
+
+```sql
+CREATE OR REPLACE FUNCTION public.is_approved_user()
+RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER
+SET search_path = public AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles
+    WHERE user_id = auth.uid() AND is_approved = true
+  );
+$$;
+```
+
+Luego recrear cada política añadiendo la comprobación. Para tablas con ownership directo (`user_id = auth.uid()`), se añade `AND public.is_approved_user()`. Para tablas con ownership indirecto (`owns_session()`, `owns_routine()`, etc.), se añade `AND public.is_approved_user()` al USING/WITH CHECK.
+
+Las políticas de `profiles` NO se modifican (el usuario necesita leer/actualizar su perfil incluso sin aprobar).
+
+### 3. Error messages internos expuestos (3 edge functions)
+**Archivos:** `admin-users/index.ts`, `notify-admin-new-user/index.ts`, `ai-coach/index.ts`
+
+Reemplazar `err.message` por mensajes genéricos en los catch blocks, manteniendo `console.error` para debugging.
+
+### 4. Leaked password protection
+Activar mediante la herramienta de configuración de autenticación.
+
+### Archivos afectados
 
 | Archivo | Cambio |
 |---|---|
-| `src/pages/Index.tsx` | Añadir `today`, `daysSinceLastSession` (calculado), lista de las últimas 5 fechas con sesiones completadas, y fatiga general si está disponible |
-| `supabase/functions/ai-insights/index.ts` | Actualizar el prompt de `home_summary` para que use `today` y `daysSinceLastSession` como dato explícito y NO intente calcularlo |
-
-### Detalle de los datos a enviar
-
-```typescript
-data={{
-  today: new Date().toISOString().slice(0, 10),
-  weekCount,
-  totalSessions,
-  weekVolume,
-  lastSessionDate: completedSessions?.[0]?.date ?? null,
-  daysSinceLastSession, // calculado en el componente
-  recentSessionDates: completedSessions?.slice(0, 5).map(s => s.date) ?? [],
-  weekDaysActive: weekDays.filter(d => d.active).map(d => d.label),
-}}
-```
-
-### Detalle del prompt actualizado
-
-Añadir al prompt de `home_summary`:
-- "Los datos incluyen `today` (fecha actual) y `daysSinceLastSession` (días calculados desde la última sesión completada). Usa estos valores directamente, NO los recalcules."
-- Filtrar `sessions` con `is_completed === true` antes de calcular `lastSessionDate`
-
-### Archivos a modificar: 2
-
-- `src/pages/Index.tsx` — enriquecer datos del briefing
-- `supabase/functions/ai-insights/index.ts` — ajustar prompt para usar datos precalculados
+| Migración SQL | Función `is_approved_user()` + recrear ~36 políticas RLS |
+| `supabase/functions/notify-admin-new-user/index.ts` | Escape HTML + error genérico |
+| `supabase/functions/admin-users/index.ts` | Error genérico en catch |
+| `supabase/functions/ai-coach/index.ts` | Error genérico en catch |
+| Auth config | Leaked password protection |
 

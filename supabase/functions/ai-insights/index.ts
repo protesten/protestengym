@@ -13,8 +13,10 @@ Siempre fundamentas tus recomendaciones en evidencia científica. Hablas SIEMPRE
 
 const CONTEXT_PROMPTS: Record<string, string> = {
   home_summary: `Genera un briefing diario ultra-conciso (máx 3 frases) basado en los datos del usuario.
+Los datos incluyen "today" (fecha actual) y "daysSinceLastSession" (días exactos desde la última sesión completada, ya calculados). USA ESTOS VALORES DIRECTAMENTE, NO los recalcules ni inventes otros.
+Si daysSinceLastSession es 0 → entrenó hoy. Si es 1 → entrenó ayer. Si es null → no tiene sesiones.
 Incluye: qué grupo muscular priorizar hoy según fatiga y último entrenamiento, una motivación breve.
-Si la fatiga general es alta (>70%), sugiere descanso activo. Si lleva >3 días sin entrenar, motívalo.
+Si la fatiga general es alta (>70%), sugiere descanso activo. Si daysSinceLastSession >3, motívalo a volver.
 Nunca inventes datos. Si no hay suficientes datos, da un consejo general de entrenamiento basado en evidencia.`,
 
   exercise_analysis: `Analiza el historial del ejercicio proporcionado.
