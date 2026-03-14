@@ -92,10 +92,13 @@ export default function Index() {
       <AIInsightCard
         context="home_summary"
         data={{
+          today: todayStr,
+          daysSinceLastSession,
           weekCount,
           totalSessions,
           weekVolume,
-          lastSessionDate: sessions?.[0]?.date ?? null,
+          lastSessionDate: completedSessions[0]?.date ?? null,
+          recentSessionDates: completedSessions.slice(0, 5).map(s => s.date),
           weekDaysActive: weekDays.filter(d => d.active).map(d => d.label),
         }}
         cacheKey={`home-${new Date().toISOString().slice(0, 10)}`}
